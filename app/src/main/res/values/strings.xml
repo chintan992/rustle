@@ -171,4 +171,25 @@
     <!-- MiniPlayer -->
     <string name="miniplayer_play">Play</string>
     <string name="miniplayer_pause">Pause</string>
+
+    <!-- App updates -->
+    <string name="update_title">App update available</string>
+    <string name="update_available_message">Rustle %1$s is available. Download and install it now?</string>
+    <string name="update_later">Later</string>
+    <string name="update_download_install">Download and install</string>
+    <string name="update_permission_title">Allow Rustle updates</string>
+    <string name="update_permission_message">Android needs permission to install updates downloaded from GitHub. Allow installs from Rustle, then return here.</string>
+    <string name="update_open_settings">Open settings</string>
+    <string name="update_downloading">Downloading update… %1$s</string>
+    <string name="update_downloading_unknown">Downloading update…</string>
+    <string name="update_cancel_download">Cancel download</string>
+    <string name="update_up_to_date_title">You’re up to date</string>
+    <string name="update_up_to_date_message">You’re using the latest available version.</string>
+    <string name="update_not_published_title">No release published yet</string>
+    <string name="update_not_published_message">There isn’t a published GitHub release to check yet. Try again after an update is released.</string>
+    <string name="update_error_title">Couldn’t check for updates</string>
+    <string name="update_dismiss">OK</string>
+    <string name="settings_updates_title">App updates</string>
+    <string name="settings_updates_desc">Check GitHub for a newer version of Rustle.</string>
+    <string name="settings_check_updates">Check for updates</string>
 </resources>

@@ -39,11 +39,6 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // Keep the release artifact broadly compatible; release overrides this
-        // default filter below with all ABIs supported by the native AARs.
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
     }
 
     signingConfigs {
@@ -57,18 +52,8 @@ android {
         }
       }
     }
-
     buildTypes {
-        debug {
-            ndk {
-                abiFilters += listOf("x86_64")
-            }
-        }
         release {
-            ndk {
-                abiFilters.clear()
-                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            }
             // Round 10 (Task 5): ship minified. The sherpa-onnx AAR ships an
             // EMPTY consumer proguard file, so all its keeps live in
             // app/proguard-rules.pro (com.k2fsa.** reached from JNI).
@@ -79,6 +64,14 @@ android {
               signingConfig = signingConfigs.getByName("release")
             }
         }
+    }
+    splits {
+      abi {
+        isEnable = true
+        reset()
+        include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        isUniversalApk = false
+      }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

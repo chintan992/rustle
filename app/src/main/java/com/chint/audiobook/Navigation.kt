@@ -12,9 +12,15 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,8 +34,12 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
@@ -48,6 +58,9 @@ import com.chint.audiobook.ui.reader.ReaderScreen
 import com.chint.audiobook.ui.reader.ReaderViewModel
 import com.chint.audiobook.ui.settings.SettingsScreen
 import com.chint.audiobook.ui.settings.SettingsViewModel
+import com.chint.audiobook.update.UpdateRelease
+import com.chint.audiobook.update.UpdateUiState
+import com.chint.audiobook.update.UpdateViewModel
 import com.chint.audiobook.theme.AppMotion
 
 @Composable
@@ -56,6 +69,8 @@ fun MainNavigation() {
   val libraryViewModel: LibraryViewModel = viewModel()
   val readerViewModel: ReaderViewModel = viewModel()
   val modelViewModel: ModelViewModel = viewModel()
+  val updateViewModel: UpdateViewModel = viewModel()
+  val updateUiState by updateViewModel.state.collectAsState()
 
   // N14: collect the raw DataStore flow with initial=null and render nothing
   // until settings are actually loaded from disk, so no screen paints from the
@@ -108,6 +123,14 @@ fun MainNavigation() {
   // launch-blocking system dialog. Fires once per process via a saveable flag;
   // only on Android 13+ and only if not already granted.
   val localContext = androidx.compose.ui.platform.LocalContext.current
+  val lifecycleOwner = LocalLifecycleOwner.current
+  DisposableEffect(lifecycleOwner, updateViewModel) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) updateViewModel.onResume()
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+  }
   // Q2: one-time battery guidance when not exempt from optimization.
   val powerManager = localContext.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
   val batteryGuidanceVisible = !powerManager.isIgnoringBatteryOptimizations(localContext.packageName) &&
@@ -135,6 +158,9 @@ fun MainNavigation() {
   }
 
   LaunchedEffect(appSettings.onboardingCompleted) {
+    if (appSettings.onboardingCompleted) {
+      updateViewModel.checkForUpdate()
+    }
     if (!appSettings.onboardingCompleted && navigationState.currentRoute != VoiceSetupKey) {
       navigator.navigate(VoiceSetupKey)
     }
@@ -511,6 +537,7 @@ fun MainNavigation() {
           onUpdateSettings = { transform -> settingsViewModel.updateSettings(transform) },
           onOpenVoiceSetup = { navigator.navigate(VoiceSetupKey) },
           onOpenLicenses = { navigator.navigate(LicensesKey) },
+          onCheckUpdates = { updateViewModel.checkForUpdate(manual = true) },
           onBackClick = { navigator.goBack() }
         )
       }
@@ -537,5 +564,93 @@ fun MainNavigation() {
     },
     modifier = Modifier.align(Alignment.BottomCenter)
   )
+  UpdatePrompt(
+    state = updateUiState,
+    onDismiss = { updateViewModel.dismiss() },
+    onDownload = { release -> updateViewModel.downloadAndInstall(release) },
+    onOpenInstallSettings = { updateViewModel.openInstallPermissionSettings() }
+  )
+  }
+}
+
+@Composable
+private fun UpdatePrompt(
+  state: UpdateUiState,
+  onDismiss: () -> Unit,
+  onDownload: (UpdateRelease) -> Unit,
+  onOpenInstallSettings: () -> Unit
+) {
+  when (state) {
+    is UpdateUiState.Available -> AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text(stringResource(R.string.update_title)) },
+      text = {
+        Text(stringResource(R.string.update_available_message, state.release.versionName))
+      },
+      confirmButton = {
+        TextButton(onClick = { onDownload(state.release) }) {
+          Text(stringResource(R.string.update_download_install))
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_later)) }
+      }
+    )
+    is UpdateUiState.PermissionRequired -> AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text(stringResource(R.string.update_permission_title)) },
+      text = { Text(stringResource(R.string.update_permission_message)) },
+      confirmButton = {
+        TextButton(onClick = onOpenInstallSettings) {
+          Text(stringResource(R.string.update_open_settings))
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_later)) }
+      }
+    )
+    is UpdateUiState.Downloading -> AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text(stringResource(R.string.update_title)) },
+      text = {
+        Column {
+          CircularProgressIndicator()
+          Text(
+            state.progress?.let { stringResource(R.string.update_downloading, "$it%") }
+              ?: stringResource(R.string.update_downloading_unknown)
+          )
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = onDismiss) {
+          Text(stringResource(R.string.update_cancel_download))
+        }
+      }
+    )
+    UpdateUiState.UpToDate -> AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text(stringResource(R.string.update_up_to_date_title)) },
+      text = { Text(stringResource(R.string.update_up_to_date_message)) },
+      confirmButton = {
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_dismiss)) }
+      }
+    )
+    UpdateUiState.NoPublishedRelease -> AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text(stringResource(R.string.update_not_published_title)) },
+      text = { Text(stringResource(R.string.update_not_published_message)) },
+      confirmButton = {
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_dismiss)) }
+      }
+    )
+    is UpdateUiState.Failed -> AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text(stringResource(R.string.update_error_title)) },
+      text = { Text(state.message) },
+      confirmButton = {
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_dismiss)) }
+      }
+    )
+    UpdateUiState.Idle, UpdateUiState.Checking -> Unit
   }
 }

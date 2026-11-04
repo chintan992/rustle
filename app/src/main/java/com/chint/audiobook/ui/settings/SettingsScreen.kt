@@ -57,6 +57,7 @@ fun SettingsScreen(
   onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit,
   onOpenVoiceSetup: () -> Unit,
   onOpenLicenses: () -> Unit = {},
+  onCheckUpdates: () -> Unit = {},
   onBackClick: () -> Unit
 ) {
   // UI Round 4 (R5): the same DisplaySheet the reader's "Aa" chip opens, hosted
@@ -432,6 +433,20 @@ fun SettingsScreen(
     Spacer(modifier = Modifier.height(12.dp))
 
     // B4: reviewers look for a version indicator; also the license anchor.
+    SectionCard {
+      Text(stringResource(R.string.settings_updates_title), style = MaterialTheme.typography.titleMedium)
+      Text(
+        stringResource(R.string.settings_updates_desc),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+      OutlinedButton(onClick = onCheckUpdates) {
+        Text(stringResource(R.string.settings_check_updates))
+      }
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
     SectionCard {
       Row(
         verticalAlignment = Alignment.CenterVertically,
