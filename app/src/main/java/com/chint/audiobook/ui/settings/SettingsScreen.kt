@@ -32,6 +32,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,11 +46,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.chint.audiobook.R
 import com.chint.audiobook.data.model.AppSettings
 import com.chint.audiobook.data.model.ThemeMode
 import com.chint.audiobook.data.model.TtsEngine
 import com.chint.audiobook.ui.reader.DisplaySheet
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -195,10 +202,23 @@ fun SettingsScreen(
     val stats = remember(context) {
       com.chint.audiobook.engine.ListeningStatsRepository(java.io.File(context.filesDir, "stats"))
     }
-    val statsSummary by remember(context) {
-      mutableStateOf(runCatching { stats.load() }.getOrDefault(com.chint.audiobook.engine.ListeningStatsData()))
+    var statsSummary by remember(context) {
+      mutableStateOf(stats.load())
     }
-    val todayKey = remember(context) { com.chint.audiobook.engine.ListeningStatsRepository.dayKeyOf(System.currentTimeMillis()) }
+    var todayKey by remember(context) {
+      mutableStateOf(com.chint.audiobook.engine.ListeningStatsRepository.dayKeyOf(System.currentTimeMillis()))
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(stats, lifecycleOwner) {
+      lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+        while (true) {
+          val now = System.currentTimeMillis()
+          statsSummary = withContext(Dispatchers.IO) { stats.load() }
+          todayKey = com.chint.audiobook.engine.ListeningStatsRepository.dayKeyOf(now)
+          delay(10_000L)
+        }
+      }
+    }
     // Q5: yearly reading goal.
     var showGoalPicker by rememberSaveable { mutableStateOf(false) }
     val yearKey = todayKey.substringBefore("-")

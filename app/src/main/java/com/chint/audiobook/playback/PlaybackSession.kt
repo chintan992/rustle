@@ -1335,12 +1335,15 @@ class PlaybackSession(
       val stats = ListeningStatsRepository(File(context.filesDir, "stats"))
       while (isActive) {
         delay(POSITION_TICK_MS)
-        val book = _activeBook.value ?: continue
+        val book = _activeBook.value
+        if (book == null) {
+          lastStatsAtMs = System.currentTimeMillis()
+          continue
+        }
         val ps = playerState.value
         if (ps.isPlaying && !positionSavesSuppressed) {
           val now = System.currentTimeMillis()
-          // Clamp absorbs a dozy tick gap without inventing listening time.
-          val listened = (now - lastStatsAtMs).coerceIn(0L, 30_000L)
+          val listened = ListeningStatsRepository.elapsedListeningSeconds(lastStatsAtMs, now)
           if (listened > 0L) stats.addListening(book.slug, listened)
           lastStatsAtMs = now
         } else {

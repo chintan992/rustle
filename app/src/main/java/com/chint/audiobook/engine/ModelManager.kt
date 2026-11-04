@@ -61,7 +61,7 @@ class ModelManager(private val context: Context) {
    * which are guarded by [BuildConfig.DEBUG]; in a release build the flow's
    * consume sites find no shots, so the hooks are inert by construction.
    */
-  val debugHooks = DebugPackHooks()
+  private val debugHooks = if (BuildConfig.DEBUG) DebugPackHooks() else null
 
   /** Optional sink for human-readable debug-hook events (wired by the model VM). */
   @Volatile
@@ -251,7 +251,7 @@ class ModelManager(private val context: Context) {
       // Round 10 (Task 3): never let an armed debug shot leak into a later,
       // unrelated download. Consumed shots are already gone; anything left
       // armed (e.g. the flow failed before a verification pass) is dropped.
-      if (debugHooks.isArmed()) {
+      if (debugHooks?.isArmed() == true) {
         debugHooks.disarm()
         debugLog("R10 debug: leftover armed hook shot(s) disarmed at flow end")
       }
@@ -267,7 +267,8 @@ class ModelManager(private val context: Context) {
   /** Journey A: corrupt one byte of a final-dir pack file at flow entry. */
   fun debugArmFinalDirCorruption(fileName: String): Boolean {
     if (!BuildConfig.DEBUG) return false
-    debugHooks.armFinalDirCorruption(fileName)
+    val hooks = debugHooks ?: return false
+    hooks.armFinalDirCorruption(fileName)
     debugLog("R10 debug: armed — corrupt 1 byte of '$fileName' in the final dir at the next download entry")
     return true
   }
@@ -275,7 +276,8 @@ class ModelManager(private val context: Context) {
   /** Journey B: corrupt the staged copy before each of the two sha256 passes. */
   fun debugArmStagedVerifyCorruption(fileName: String, times: Int = 2): Boolean {
     if (!BuildConfig.DEBUG) return false
-    debugHooks.armStagedVerifyCorruption(fileName, times)
+    val hooks = debugHooks ?: return false
+    hooks.armStagedVerifyCorruption(fileName, times)
     debugLog("R10 debug: armed — corrupt 1 byte of staged '$fileName' before each of the $times sha256 passes")
     return true
   }
@@ -328,7 +330,8 @@ class ModelManager(private val context: Context) {
 
   /** Hook consumption at flow entry: flip one final-dir byte, in place. */
   private fun debugConsumeFinalDirHook(finalDir: File) {
-    val fileName = debugHooks.consumeFinalDirShot() ?: return
+    if (!BuildConfig.DEBUG) return
+    val fileName = debugHooks?.consumeFinalDirShot() ?: return
     val offset = DebugPackCorruptor.flipOneByte(File(finalDir, fileName))
     debugLog(
       "R10 debug hook: flipped 1 byte of final-dir '$fileName' at offset=$offset — the flow must detect and repair"
@@ -337,7 +340,8 @@ class ModelManager(private val context: Context) {
 
   /** Hook consumption right before a staging sha256 pass. */
   private fun debugConsumeStagedVerifyHook(staging: File, label: String) {
-    val fileName = debugHooks.consumeStagedVerifyShot() ?: return
+    if (!BuildConfig.DEBUG) return
+    val fileName = debugHooks?.consumeStagedVerifyShot() ?: return
     val offset = DebugPackCorruptor.flipOneByte(File(staging, fileName))
     debugLog(
       "R10 debug hook [$label]: flipped 1 byte of staged '$fileName' at offset=$offset — verify must catch it"

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -49,11 +51,15 @@ fun ModelManagerScreen(
   kokoroDownloadState: DownloadState,
   kokoroPackIntegrity: PackIntegrity,
   rtfStats: RtfStats,
+  debugBuild: Boolean,
+  debugNote: String?,
   onDownloadClick: () -> Unit,
   onClearModelData: () -> Unit,
   onDownloadKokoroClick: () -> Unit,
   onClearKokoroModelData: () -> Unit,
   onRunBenchmarkClick: () -> Unit,
+  onDebugCorruptFinalPackFile: () -> Unit,
+  onDebugCorruptStagedPackFile: () -> Unit,
   onBackClick: () -> Unit
 ) {
   var showClearConfirmation by remember { mutableStateOf(false) }
@@ -64,6 +70,7 @@ fun ModelManagerScreen(
       .fillMaxSize()
       .windowInsetsPadding(WindowInsets.safeDrawing)
       .padding(16.dp)
+      .verticalScroll(rememberScrollState())
   ) {
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -331,77 +338,115 @@ fun ModelManagerScreen(
       )
     }
 
-    Spacer(modifier = Modifier.height(16.dp))
-
-    // Round 9 (Task 4): per-chunk RTF aggregation over real render_done ledger
-    // events — the APP_PLAN §10 ≥200-chunk bar, auditable on-device.
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp)) {
-        Text("RTF stats", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-        if (rtfStats.count > 0) {
-          Text(
-            "RTF stats: ${rtfStats.count} chunks, mean ${"%.3f".format(rtfStats.mean)}, " +
-              "p50 ${"%.3f".format(rtfStats.p50)}, p95 ${"%.3f".format(rtfStats.p95)}"
-          )
-          Text(
-            "gate: mean and p95 <= ${RtfBenchmark.RTF_GATE}",
-            style = MaterialTheme.typography.bodySmall,
-            color = if (rtfStats.mean <= RtfBenchmark.RTF_GATE && rtfStats.p95 <= RtfBenchmark.RTF_GATE)
-              MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.error
-          )
-        } else {
-          Text(
-            "No render_done events yet - synthesize a chapter first.",
-            style = MaterialTheme.typography.bodySmall
-          )
+    if (debugBuild) {
+      Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          Text("RTF stats", style = MaterialTheme.typography.titleMedium)
+          Spacer(modifier = Modifier.height(8.dp))
+          if (rtfStats.count > 0) {
+            Text(
+              "RTF stats: ${rtfStats.count} chunks, mean ${"%.3f".format(rtfStats.mean)}, " +
+                "p50 ${"%.3f".format(rtfStats.p50)}, p95 ${"%.3f".format(rtfStats.p95)}"
+            )
+            Text(
+              "gate: mean and p95 <= ${RtfBenchmark.RTF_GATE}",
+              style = MaterialTheme.typography.bodySmall,
+              color = if (rtfStats.mean <= RtfBenchmark.RTF_GATE && rtfStats.p95 <= RtfBenchmark.RTF_GATE)
+                MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.error
+            )
+          } else {
+            Text(
+              "No render_done events yet - synthesize a chapter first.",
+              style = MaterialTheme.typography.bodySmall
+            )
+          }
         }
       }
-    }
 
-    Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(16.dp))
 
-    // B4: the self-test is always visible; it is simply disabled without a pack.
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp)) {
-        Text("Benchmark Self-Test", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
+      Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          Text("Benchmark Self-Test", style = MaterialTheme.typography.titleMedium)
+          Spacer(modifier = Modifier.height(8.dp))
 
-        if (!packIntegrity.packReady) {
+          if (!packIntegrity.packReady) {
+            Text(
+              "Download the model pack first - the benchmark needs all 7 files (~145 MB).",
+              color = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+          }
+
+          Button(
+            onClick = onRunBenchmarkClick,
+            enabled = packIntegrity.packReady &&
+              downloadState !is DownloadState.Downloading &&
+              downloadState !is DownloadState.Verifying &&
+              downloadState !is DownloadState.WaitingForWifi
+          ) {
+            Text("Run RTF Benchmark Self-Test")
+          }
+
+          benchmarkResult?.let { bench ->
+            Spacer(modifier = Modifier.height(12.dp))
+            if (bench.initOk) {
+              val verdict = if (bench.passesGate) "ENGINE READY" else "TOO SLOW FOR REALTIME (gate ${"%.2f".format(RtfBenchmark.RTF_GATE)})"
+              Text(verdict, style = MaterialTheme.typography.titleMedium)
+              Text("RTF: ${"%.3f".format(bench.rtf)} (gate <= 0.5)")
+              Text("Cold load: ${bench.coldLoadMs} ms")
+              Text("First audio: ${bench.firstAudioMs} ms")
+              Text("Audio rendered: ${"%.2f".format(bench.audioDurationSec)} s in ${"%.2f".format(bench.wallDurationSec)} s")
+              Text("sampleRate=${bench.sampleRate} numSpeakers=${bench.numSpeakers}")
+              Text(bench.voiceMapping, style = MaterialTheme.typography.bodySmall)
+            } else {
+              Text("ENGINE NOT READY", color = MaterialTheme.colorScheme.error)
+              Text(bench.reason, color = MaterialTheme.colorScheme.error)
+              Text("No numbers are shown because the engine did not initialize.", style = MaterialTheme.typography.bodySmall)
+            }
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(16.dp))
+
+      Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          Text("Pack recovery self-tests", style = MaterialTheme.typography.titleMedium)
+          Spacer(modifier = Modifier.height(8.dp))
           Text(
-            "Download the model pack first - the benchmark needs all 7 files (~145 MB).",
-            color = MaterialTheme.colorScheme.error
+            "Injects a temporary checksum failure to exercise the normal pack recovery flow. " +
+              "These tests require the Supertonic pack to be installed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
           )
           Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Button(
-          onClick = onRunBenchmarkClick,
-          enabled = packIntegrity.packReady && downloadState !is DownloadState.Downloading
-        ) {
-          Text("Run RTF Benchmark Self-Test")
-        }
-
-        benchmarkResult?.let { bench ->
-          Spacer(modifier = Modifier.height(12.dp))
-          if (bench.initOk) {
-            val verdict = if (bench.passesGate) "ENGINE READY" else "TOO SLOW FOR REALTIME (gate ${"%.2f".format(RtfBenchmark.RTF_GATE)})"
-            Text("$verdict", style = MaterialTheme.typography.titleMedium)
-            Text("RTF: ${"%.3f".format(bench.rtf)} (gate <= 0.5)")
-            Text("Cold load: ${bench.coldLoadMs} ms")
-            Text("First audio: ${bench.firstAudioMs} ms")
-            Text("Audio rendered: ${"%.2f".format(bench.audioDurationSec)} s in ${"%.2f".format(bench.wallDurationSec)} s")
-            Text("sampleRate=${bench.sampleRate} numSpeakers=${bench.numSpeakers}")
-            Text(bench.voiceMapping, style = MaterialTheme.typography.bodySmall)
-          } else {
-            Text("ENGINE NOT READY", color = MaterialTheme.colorScheme.error)
-            Text(bench.reason, color = MaterialTheme.colorScheme.error)
-            Text("No numbers are shown because the engine did not initialize.", style = MaterialTheme.typography.bodySmall)
+          Button(
+            onClick = onDebugCorruptFinalPackFile,
+            enabled = packIntegrity.packReady &&
+              downloadState !is DownloadState.Downloading &&
+              downloadState !is DownloadState.Verifying &&
+              downloadState !is DownloadState.WaitingForWifi
+          ) {
+            Text("Test recovery from a corrupted installed file")
+          }
+          OutlinedButton(
+            onClick = onDebugCorruptStagedPackFile,
+            enabled = packIntegrity.packReady &&
+              downloadState !is DownloadState.Downloading &&
+              downloadState !is DownloadState.Verifying &&
+              downloadState !is DownloadState.WaitingForWifi
+          ) {
+            Text("Test staged verification retry failure")
+          }
+          debugNote?.let {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall)
           }
         }
       }
     }
 
-    Spacer(modifier = Modifier.weight(1f))
+    Spacer(modifier = Modifier.height(16.dp))
   }
 }

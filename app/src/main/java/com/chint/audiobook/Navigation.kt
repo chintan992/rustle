@@ -508,7 +508,8 @@ fun MainNavigation() {
         val packIntegrity by modelViewModel.packIntegrity.collectAsState()
         val kokoroPackIntegrity by modelViewModel.kokoroPackIntegrity.collectAsState()
         val rtfStats by modelViewModel.rtfStats.collectAsState()
-        // Round 9 (Task 4): refresh while visible so background renders show up.
+        val debugNote by modelViewModel.debugNote.collectAsState()
+        // Keep pack integrity current while the model manager is visible.
         LaunchedEffect(Unit) {
           while (true) {
             modelViewModel.refreshModelState()
@@ -522,11 +523,15 @@ fun MainNavigation() {
           kokoroDownloadState = kokoroDownloadState,
           kokoroPackIntegrity = kokoroPackIntegrity,
           rtfStats = rtfStats,
+          debugBuild = modelViewModel.debugBuild,
+          debugNote = debugNote,
           onDownloadClick = { modelViewModel.startDownload() },
           onClearModelData = { modelViewModel.clearModelData() },
           onDownloadKokoroClick = { modelViewModel.startKokoroDownload() },
           onClearKokoroModelData = { modelViewModel.clearKokoroModelData() },
           onRunBenchmarkClick = { modelViewModel.runBenchmark() },
+          onDebugCorruptFinalPackFile = { modelViewModel.debugCorruptFinalPackFileAndRecover() },
+          onDebugCorruptStagedPackFile = { modelViewModel.debugCorruptStagedPackFileTwiceAndExhaust() },
           onBackClick = { navigator.goBack() }
         )
       }

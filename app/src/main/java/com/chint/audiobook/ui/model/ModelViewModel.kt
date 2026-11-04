@@ -102,7 +102,9 @@ class ModelViewModel @Inject constructor(
 
   init {
     // Round 10 (Task 3): route debug-hook events into the UI note line.
-    modelManager.debugEventListener = { note -> _debugNote.value = note }
+    if (debugBuild) {
+      modelManager.debugEventListener = { note -> _debugNote.value = note }
+    }
     viewModelScope.launch(Dispatchers.IO) {
       // A8: if the pack repeatedly fails sha256 verification while present on
       // disk, surface it instead of pretending the pack is fine. Hashing the
@@ -246,7 +248,7 @@ class ModelViewModel @Inject constructor(
     // "Audiobook isn't responding"). The benchmark work itself is synchronous,
     // so it must be shifted off the main thread. The in-flight flag keeps the
     // engine's "one generation at a time" invariant if the button is tapped twice.
-    if (benchmarkRunning) return
+    if (!debugBuild || benchmarkRunning || downloadBusy()) return
     benchmarkRunning = true
     viewModelScope.launch {
       try {
@@ -274,10 +276,11 @@ class ModelViewModel @Inject constructor(
    */
   fun refreshModelState() {
     viewModelScope.launch(Dispatchers.IO) {
-      val events = loadAllLedgerEvents()
-      val stats = RtfStats.fromEvents(events)
+      if (debugBuild) {
+        val events = loadAllLedgerEvents()
+        _rtfStats.value = RtfStats.fromEvents(events)
+      }
       val integrity = assessPack()
-      _rtfStats.value = stats
       _packIntegrity.value = integrity
       _kokoroPackIntegrity.value = assessKokoroPack()
       // Keep the headline honest in both directions, but never clobber an

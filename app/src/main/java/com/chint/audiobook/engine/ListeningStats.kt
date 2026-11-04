@@ -2,6 +2,7 @@ package com.chint.audiobook.engine
 
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -68,23 +69,27 @@ class ListeningStatsRepository(private val statsDir: File) {
       fmt.parse(key)?.time
     }.getOrNull()
 
+    /** Converts a clamped heartbeat interval in milliseconds to whole seconds. */
+    fun elapsedListeningSeconds(startedAtMs: Long, nowMs: Long): Long =
+      (nowMs - startedAtMs).coerceIn(0L, MAX_LISTENING_INTERVAL_MS) / 1_000L
+
     /**
      * Consecutive days ENDING today (or yesterday, so today's streak is not
      * lost before the first listen of the day) with ≥ [minDaySeconds].
      */
     fun streakDays(perDaySeconds: Map<String, Long>, todayKey: String, minDaySeconds: Long = 60L): Int {
       var streak = 0
-      var cursor = parseDayKey(todayKey) ?: return 0
+      var cursorKey = todayKey
+      if (parseDayKey(cursorKey) == null) return 0
       // A streak survives "today not listened yet" — start checking yesterday
       // if today has nothing.
-      if ((perDaySeconds[todayKey] ?: 0L) < minDaySeconds) cursor -= DAY_MS
+      if ((perDaySeconds[cursorKey] ?: 0L) < minDaySeconds) {
+        cursorKey = shiftDayKey(cursorKey, -1) ?: return 0
+      }
       while (true) {
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        fmt.timeZone = TimeZone.getDefault()
-        val key = fmt.format(Date(cursor))
-        if ((perDaySeconds[key] ?: 0L) >= minDaySeconds) {
+        if ((perDaySeconds[cursorKey] ?: 0L) >= minDaySeconds) {
           streak++
-          cursor -= DAY_MS
+          cursorKey = shiftDayKey(cursorKey, -1) ?: return streak
         } else {
           return streak
         }
@@ -103,12 +108,8 @@ class ListeningStatsRepository(private val statsDir: File) {
 
     /** Total seconds across the 7-day window ending [todayKey] (inclusive). */
     fun weekSeconds(perDaySeconds: Map<String, Long>, todayKey: String): Long {
-      val today = parseDayKey(todayKey) ?: return 0L
-      val keys = (0 until 7).map { offset ->
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        fmt.timeZone = TimeZone.getDefault()
-        fmt.format(Date(today - offset * DAY_MS))
-      }
+      if (parseDayKey(todayKey) == null) return 0L
+      val keys = (0 until 7).mapNotNull { offset -> shiftDayKey(todayKey, -offset) }
       return keys.sumOf { perDaySeconds[it] ?: 0L }
     }
 
@@ -124,6 +125,19 @@ class ListeningStatsRepository(private val statsDir: File) {
       }
     }
 
-    private const val DAY_MS = 24L * 60 * 60 * 1000
+    private const val MAX_LISTENING_INTERVAL_MS = 30_000L
+
+    private fun shiftDayKey(dayKey: String, days: Int): String? {
+      val date = parseDayKey(dayKey)?.let(::Date) ?: return null
+      val timeZone = TimeZone.getDefault()
+      val calendar = Calendar.getInstance(timeZone, Locale.US).apply {
+        timeInMillis = date.time
+        add(Calendar.DAY_OF_YEAR, days)
+      }
+      val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        this.timeZone = timeZone
+      }
+      return formatter.format(calendar.time)
+    }
   }
 }
