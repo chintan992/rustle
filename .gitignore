@@ -1,0 +1,35 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+.zcode
+/store-assets/
+
+# Round 9: ignore every module's build output and the local working copies of
+# the model pack (the app ships the in-app downloader; pack bytes are never
+# versioned).
+app/build/
+app/captures/
+work/
+
+# Device UI-audit sweeps (screencaps + view dumps); the audit record itself is
+# ELEVENREADER_UI_PLAN.md / UI_ROUND4_PLAN.md
+/.ui-audit-v3/
+/.ui-audit-v4/
+/HyperFrames-win32-x64/
+/videos/
+test*
+
+#emulator scripts
+/scripts/

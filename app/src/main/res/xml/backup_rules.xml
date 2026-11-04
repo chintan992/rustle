@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+   Q1 (backup round): auto-backup has a ~25 MB per-app quota and no wildcard
+   support, so the heavy trees are excluded wholesale and the tiny
+   irreplaceable sidecars (bookmarks/positions/prefs) are MIRRORED into
+   files/backup/ by BackupMirror (see that class for the restore flow).
+   Everything under models/ is a re-downloadable pack; books/ audio is
+   re-synthesizable and books/ text is re-importable.
+-->
+<full-backup-content>
+    <exclude domain="file" path="models" />
+    <exclude domain="file" path="books" />
+</full-backup-content>

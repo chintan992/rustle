@@ -1,0 +1,174 @@
+<resources>
+    <string name="app_name">Rustle</string>
+
+    <!-- Navigation & Common -->
+    <string name="common_back">Back</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_clear">Clear</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_ok">OK</string>
+    <string name="common_dismiss">Dismiss</string>
+    <string name="common_save">Save</string>
+    <string name="common_change">Change</string>
+    <string name="common_adjust">Adjust</string>
+    <string name="common_loading">Loading…</string>
+    <string name="common_close">Close</string>
+    <string name="common_done">Done</string>
+
+    <!-- Library Screen -->
+    <string name="library_title">Rustle</string>
+    <string name="library_header_subtitle">Your offline library</string>
+    <string name="library_search_placeholder">Search by title, author, or language…</string>
+    <string name="library_shelf_empty">Your shelf is empty</string>
+    <string name="library_shelf_empty_desc">Import an EPUB to start listening — it stays on your device.</string>
+    <string name="library_import_first_book">Import your first book</string>
+    <string name="library_caught_up_title">You’re caught up</string>
+    <string name="library_caught_up_desc">Your current book is ready whenever you are. Add another book to keep your shelf growing.</string>
+    <string name="library_continue_listening">Continue Listening</string>
+    <string name="library_search_results">Search results (%1$d)</string>
+    <string name="library_no_audiobooks_found">No audiobooks found</string>
+    <string name="library_no_matches_for">No matches for \"%1$s\"</string>
+    <string name="library_keep_listening_bg_title">Keep listening in the background</string>
+    <string name="library_keep_listening_bg_text">Many phones stop background audio apps to save battery. To let chapter preparation run, set this app\'s battery usage to Unrestricted: App info > Battery > Unrestricted / No restrictions (wording varies by brand).</string>
+    <string name="library_open_app_info">Open app info</string>
+    <string name="library_partial_delete_title">Some files could not be deleted</string>
+    <string name="library_partial_delete_text">Part of the book is still in use or locked. The book may still appear in your library — close the app and delete it again.</string>
+    <string name="library_open_book">Open book</string>
+    <string name="library_clear_rendered_audio">Clear rendered audio</string>
+    <string name="library_clear_audio_desc">Frees space; chapters re-render on replay</string>
+    <string name="library_delete_from_device">Delete from device</string>
+    <string name="library_delete_from_device_desc">Removes the book, audio, bookmarks and progress</string>
+    <string name="library_clear_audio_title">Clear rendered audio?</string>
+    <string name="library_clear_audio_message">Removes all synthesized audio for %1$s. Your position, bookmarks and the book text stay; played chapters re-render on demand.</string>
+    <string name="library_delete_book_title">Delete %1$s?</string>
+    <string name="library_delete_book_message">Everything on this device is removed: the book, its rendered audio, bookmarks and listening progress. This cannot be undone.</string>
+    <string name="library_add_books">Add Books</string>
+
+    <!-- Voice Setup (Onboarding) -->
+    <string name="onboarding_choose_narrator">Choose Your Narrator</string>
+    <string name="onboarding_narrator_subtitle">Listen to the ten Supertonic voices and pick your default narrator.</string>
+    <string name="onboarding_highlight_sentence">Highlight sentence being read</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_preview_voice">Preview voice %1$s</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_default_narrator">Default Narrator</string>
+    <string name="settings_current_voice">Current: %1$s</string>
+    <string name="settings_highlight_title">Sentence Karaoke Highlight</string>
+    <string name="settings_highlight_desc">Tint the sentence currently being read</string>
+    <string name="settings_wifi_only_title">Wi-Fi Only Downloads</string>
+    <string name="settings_wifi_only_desc">Fetch the model pack over Wi-Fi only</string>
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_theme_desc">Theme used across the app</string>
+    <string name="settings_reader_text">Reader Text</string>
+    <string name="settings_listening_stats_title">Listening Goals &amp; Stats</string>
+    <string name="settings_yearly_goal">Yearly reading goal</string>
+    <string name="settings_cache_prep_title">Audio Cache &amp; Preparation</string>
+    <string name="settings_cache_cap">Rendered audio cache cap</string>
+    <string name="settings_prepare_ahead">Prepare chapters in advance</string>
+    <string name="settings_model_manager_title">Model Manager</string>
+    <string name="settings_model_manager_desc">Manage offline TTS models and voices</string>
+    <string name="settings_licenses_title">Open source licenses</string>
+    <string name="settings_about_title">About Rustle</string>
+    <string name="settings_listening">Listening</string>
+    <string name="settings_multi_voice">Multi-Voice</string>
+    <string name="settings_multi_voice_desc">Quoted dialogue can render in a different voice than narration</string>
+    <string name="settings_separate_dialogue_voice">Separate Dialogue Voice</string>
+    <string name="settings_separate_dialogue_desc">Sentences that are mostly quoted speech use the dialogue narrator</string>
+    <string name="settings_expressive_narration">Expressive Narration</string>
+    <string name="settings_expressive_desc">Add breaths, laughter and sighs at natural cues when preparing books</string>
+    <string name="settings_dialogue_narrator">Dialogue Narrator</string>
+    <string name="settings_audio_cache">Audio Cache</string>
+    <string name="settings_audio_cache_desc">Cap for synthesized audio on this device (oldest chapters evict first)</string>
+    <string name="settings_prepare_ahead_title">Prepare Ahead</string>
+    <string name="settings_prepare_ahead_desc">Render upcoming chapters in the background while plugged in</string>
+    <string name="settings_prepare_wifi_only">Wi-Fi Only</string>
+    <string name="settings_prepare_wifi_only_desc">Prepare only on unmetered networks</string>
+    <string name="settings_only_charging">Only While Charging</string>
+    <string name="settings_only_charging_desc">Pause preparation on battery power</string>
+    <string name="settings_battery_saver">Battery Saver</string>
+    <string name="settings_battery_saver_desc">Freeze all background preparation</string>
+    <string name="settings_licenses_ai_disclosure">Licenses &amp; AI Disclosure</string>
+    <string name="settings_licenses_supporting">AI narration info, OpenRAIL-M, Apache-2.0, MIT</string>
+    <string name="settings_report_issue">Report an issue</string>
+    <string name="settings_report_issue_supporting">Flag narration problems or anything offensive</string>
+    <string name="settings_about">About</string>
+    <string name="settings_about_desc">Offline audiobooks from your EPUBs — narrated on your device.</string>
+    <string name="settings_email">Email</string>
+    <string name="settings_view">View</string>
+
+    <!-- Reader Screen & Bottom Sheets -->
+    <string name="reader_reading_display">Reading display</string>
+    <string name="reader_font_size">Font size (%1$dsp)</string>
+    <string name="reader_font_family">Font family</string>
+    <string name="reader_line_spacing">Line spacing</string>
+    <string name="reader_font_sans">Sans-serif</string>
+    <string name="reader_font_serif">Serif</string>
+    <string name="reader_spacing_compact">Compact</string>
+    <string name="reader_spacing_normal">Normal</string>
+    <string name="reader_spacing_airy">Airy</string>
+    <string name="reader_contents">Contents</string>
+    <string name="reader_bookmarks">Bookmarks</string>
+    <string name="reader_add_bookmark">Add Bookmark</string>
+    <string name="reader_no_bookmarks">No bookmarks yet</string>
+    <string name="reader_sleep_timer">Sleep timer</string>
+    <string name="reader_sleep_timer_off">Off</string>
+    <string name="reader_sleep_timer_end_of_chapter">End of chapter</string>
+    <string name="reader_speed">Speed</string>
+    <string name="reader_voice_narration">Voice &amp; Narration</string>
+    <string name="reader_search">Search in book</string>
+    <string name="reader_characters">Characters</string>
+    <string name="reader_skip_silence">Skip quiet pauses</string>
+    <string name="reader_table_of_contents">Table of Contents</string>
+    <string name="reader_preparing">preparing…</string>
+    <string name="reader_change_narrator">Change Narrator</string>
+    <string name="reader_tab_narration">Narration</string>
+    <string name="reader_tab_dialogue">Dialogue</string>
+    <string name="reader_tab_language">Language</string>
+    <string name="reader_voice_changes_apply">Voice changes apply from the next sentence</string>
+    <string name="reader_default_voice">Default</string>
+    <string name="reader_active_voice">Active</string>
+    <string name="reader_dialogue_voice_desc">Quoted speech renders in this voice</string>
+    <string name="reader_dialogue_voice_off">Same as narration (off)</string>
+    <string name="reader_this_book">This book</string>
+    <string name="reader_all_books">All books</string>
+    <string name="reader_playback_speed">Playback speed</string>
+    <string name="reader_export">Export</string>
+    <string name="reader_import">Import</string>
+    <string name="reader_pause_at_chapter_end">Pause at the end of this chapter</string>
+    <string name="reader_cancel_sleep_timer">Cancel sleep timer</string>
+    <string name="reader_text_size">Text size</string>
+    <string name="reader_typeface">Typeface</string>
+    <string name="reader_jump_to_active">Jump to active sentence</string>
+    <string name="reader_buffering">Buffering…</string>
+    <string name="reader_rendering_chapter">Rendering chapter audio…</string>
+    <string name="reader_book_finished_title">Book finished!</string>
+    <string name="reader_book_finished_message">You reached the end of %1$s. Your position and stats are saved — the shelf now shows it under Finished.</string>
+    <string name="reader_book_finished_btn">Nice</string>
+    <string name="reader_chapter_counter">Chapter %1$d of %2$d</string>
+
+    <!-- Import Screen -->
+    <string name="import_title">Import Book</string>
+    <string name="import_subtitle">Import an EPUB, TXT, or Markdown file, or paste text directly.</string>
+    <string name="import_choose_file">Choose File</string>
+    <string name="import_supported_formats">EPUB, TXT, MD</string>
+    <string name="import_paste_text">Paste Text</string>
+    <string name="import_paste_title_hint">Title</string>
+    <string name="import_paste_body_hint">Paste article or book text here…</string>
+    <string name="import_expressive_narration">Expressive Narration</string>
+    <string name="import_expressive_desc">Add cues like laughter, sighs, and breaths</string>
+    <string name="import_success">Import Successful!</string>
+    <string name="import_open_in_reader">Open in Reader</string>
+    <string name="import_return_to_library">Return to Library</string>
+    <string name="import_parsing">Parsing document…</string>
+    <string name="import_preparing">Preparing chapters…</string>
+    <string name="import_segmenting">Segmenting sentences…</string>
+    <string name="import_finalizing">Finalizing book…</string>
+    <string name="import_failed">Import failed: %1$s</string>
+
+    <!-- MiniPlayer -->
+    <string name="miniplayer_play">Play</string>
+    <string name="miniplayer_pause">Pause</string>
+</resources>
