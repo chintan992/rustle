@@ -9,9 +9,9 @@
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="dev.chintan992.rustle" />
-                  <option name="mobileSdkAppId" value="1:000000000000:android:0000000000000000000000" />
-                  <option name="projectId" value="rustle-placeholder" />
-                  <option name="projectNumber" value="000000000000" />
+                  <option name="mobileSdkAppId" value="1:862310332236:android:f4205e8d1cb8c70b3381e9" />
+                  <option name="projectId" value="rustle-14fee" />
+                  <option name="projectNumber" value="862310332236" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

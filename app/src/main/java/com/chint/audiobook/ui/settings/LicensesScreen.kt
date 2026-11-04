@@ -36,7 +36,9 @@ import com.chint.audiobook.R
  * Supertonic-3 OpenRAIL-M license — its FULL text and Attachment A use
  * restrictions must be passed on to users as an enforceable provision — plus
  * attributions for the Apache-2.0 (sherpa-onnx) and MIT (ONNX Runtime)
- * components, and the AI-narration disclosure.
+ * components, the Kokoro training-data credits required by the Kokoro
+ * model card (Koniwa CC BY 3.0, SIWIS CC BY 4.0), and the AI-narration
+ * disclosure.
  *
  * License texts are bundled verbatim in res/raw (fetched from the upstream
  * sources; see RUSTLE_RELEASE_REPORT.md) and rendered read-only.
@@ -80,7 +82,11 @@ fun LicensesScreen(onBackClick: () -> Unit) {
           "License, which permits commercial use and redistribution and " +
           "includes use restrictions that apply to everyone in the chain — " +
           "the full license text follows below. Kokoro-82M v1.0 model weights " +
-          "are provided under Apache License 2.0."
+          "are provided under Apache License 2.0.",
+        "Kokoro's training set also included third-party audio that keeps its " +
+          "own license and is credited here: Koniwa tone recordings — " +
+          "© Koniwa contributors, CC BY 3.0, github.com/koniwa/koniwa — and " +
+          "SIWIS Audio — CC BY 4.0, datashare.ed.ac.uk/handle/10283/2353."
       )
     )
     Section(
@@ -104,7 +110,11 @@ fun LicensesScreen(onBackClick: () -> Unit) {
         "ONNX Runtime — MIT License — Microsoft (neural network runtime)",
         "Jetpack Compose, Media3, DataStore and other AndroidX libraries — " +
           "Apache License 2.0 — Google LLC",
-        "Kotlin — Apache License 2.0 — JetBrains"
+        "Kotlin — Apache License 2.0 — JetBrains",
+        "Koniwa tone recordings (Kokoro training data) — CC BY 3.0 — " +
+          "© Koniwa contributors — github.com/koniwa/koniwa",
+        "SIWIS Audio (Kokoro training data) — CC BY 4.0 — " +
+          "datashare.ed.ac.uk/handle/10283/2353"
       )
     )
 

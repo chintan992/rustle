@@ -91,7 +91,7 @@
     <string name="settings_battery_saver">Battery Saver</string>
     <string name="settings_battery_saver_desc">Freeze all background preparation</string>
     <string name="settings_licenses_ai_disclosure">Licenses &amp; AI Disclosure</string>
-    <string name="settings_licenses_supporting">AI narration info, OpenRAIL-M, Apache-2.0, MIT</string>
+    <string name="settings_licenses_supporting">AI narration info, OpenRAIL-M, Apache-2.0, MIT, CC BY 3.0/4.0</string>
     <string name="settings_report_issue">Report an issue</string>
     <string name="settings_report_issue_supporting">Flag narration problems or anything offensive</string>
     <string name="settings_about">About</string>

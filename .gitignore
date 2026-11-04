@@ -33,3 +33,5 @@ test*
 
 #emulator scripts
 /scripts/
+
+/app/google-services.json
