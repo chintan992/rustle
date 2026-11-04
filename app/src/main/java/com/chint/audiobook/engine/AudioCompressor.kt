@@ -7,6 +7,7 @@ import android.media.MediaMuxer
 import android.util.Log
 import com.chint.audiobook.data.model.ChapterIndex
 import com.chint.audiobook.data.model.SegmentIndexEntry
+import com.chint.audiobook.data.model.TtsEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -141,7 +142,11 @@ object AudioCompressor {
   fun buildChapterIndex(
     chapterIndex: Int,
     hashes: List<String>,
-    durationsByHash: Map<String, Long>
+    durationsByHash: Map<String, Long>,
+    engine: TtsEngine? = null,
+    narrationVoice: String? = null,
+    dialogueVoice: String? = null,
+    engineVersion: String? = null
   ): ChapterIndex {
     var cumulativeStartMs = 0L
     val entries = hashes.map { hash ->
@@ -153,7 +158,12 @@ object AudioCompressor {
     return ChapterIndex(
       chapterIndex = chapterIndex,
       totalDurationMs = cumulativeStartMs,
-      segments = entries
+      segments = entries,
+      engine = engine,
+      narrationVoice = narrationVoice,
+      dialogueVoice = dialogueVoice,
+      engineVersion = engineVersion
+        ?: if (engine == TtsEngine.KOKORO) SegmentVoices.KOKORO_CACHE_VERSION else null
     )
   }
 
@@ -191,16 +201,53 @@ object AudioCompressor {
     return m4a.exists() && m4a.length() > 0L && index.exists() && index.length() > 0L
   }
 
+  /** Matches the stored engine/voice identity and, when supplied, every expected segment hash. */
+  fun isChapterCompressedFor(
+    chapterDir: File,
+    engine: TtsEngine,
+    narrationVoice: String,
+    dialogueVoice: String?,
+    expectedHashes: Collection<String>? = null
+  ): Boolean {
+    if (!isChapterCompressed(chapterDir)) return false
+    val index = loadIndex(chapterDir) ?: return false
+    val identityMatches = engine == TtsEngine.SUPERTONIC ||
+      (index.engine == engine &&
+        index.narrationVoice == narrationVoice &&
+        index.dialogueVoice == dialogueVoice)
+    if (!identityMatches) return false
+    if (engine == TtsEngine.KOKORO && index.engineVersion != SegmentVoices.KOKORO_CACHE_VERSION) {
+      return false
+    }
+    if (expectedHashes == null) return true
+    if (expectedHashes.isEmpty()) return false
+    val indexedHashes = index.segments.mapTo(HashSet()) { it.hash }
+    return expectedHashes.all(indexedHashes::contains)
+  }
+
   suspend fun compressChapter(
     chapterDir: File,
     chapterIndex: Int,
     hashes: List<String>,
     durationsByHash: Map<String, Long>,
     encoder: AudioEncoder = AndroidMediaCodecEncoder,
+    sampleRate: Int = SAMPLE_RATE,
+    engine: TtsEngine? = null,
+    narrationVoice: String? = null,
+    dialogueVoice: String? = null,
+    engineVersion: String? = null,
     wavResolver: ((String) -> File?)? = null
   ): Boolean = withContext(Dispatchers.IO) {
     if (hashes.isEmpty()) return@withContext false
-    val index = buildChapterIndex(chapterIndex, hashes, durationsByHash)
+    val index = buildChapterIndex(
+      chapterIndex,
+      hashes,
+      durationsByHash,
+      engine,
+      narrationVoice,
+      dialogueVoice,
+      engineVersion ?: if (engine == TtsEngine.KOKORO) SegmentVoices.KOKORO_CACHE_VERSION else null
+    )
     val pcmBuffers = hashes.mapNotNull { hash ->
       val wav = wavResolver?.invoke(hash) ?: File(chapterDir, "$hash.wav")
       extractPcmBytes(wav)
@@ -221,7 +268,7 @@ object AudioCompressor {
     val tempOut = File(chapterDir, "chapter.m4a.tmp")
     val success = encoder.encodePcmToAac(
       pcmStream = concatenatedPcm.inputStream(),
-      sampleRate = SAMPLE_RATE,
+      sampleRate = sampleRate,
       channelCount = CHANNELS,
       bitrate = BITRATE_BPS,
       outputFile = tempOut
@@ -249,4 +296,3 @@ object AudioCompressor {
     return deletedCount
   }
 }
-

@@ -6,11 +6,15 @@ import androidx.lifecycle.viewModelScope
 import com.chint.audiobook.BuildConfig
 import com.chint.audiobook.engine.DownloadState
 import com.chint.audiobook.engine.ModelManager
+import com.chint.audiobook.engine.KokoroModelManager
+import com.chint.audiobook.engine.KokoroTtsEngineManager
 import com.chint.audiobook.engine.RtfBenchmark
 import com.chint.audiobook.engine.RtfBenchmarkResult
 import com.chint.audiobook.engine.RtfStats
 import com.chint.audiobook.engine.TtsEngineManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +42,8 @@ class ModelViewModel @Inject constructor(
   private val modelManager: ModelManager,
   private val settingsRepository: com.chint.audiobook.domain.repository.UserSettingsRepository,
   private val engineManager: TtsEngineManager,
+  private val kokoroModelManager: KokoroModelManager,
+  private val kokoroEngineManager: KokoroTtsEngineManager,
   private val rtfBenchmark: RtfBenchmark,
   private val ledgerRepository: LedgerRepository
 ) : ViewModel() {
@@ -60,6 +66,22 @@ class ModelViewModel @Inject constructor(
 
   val packIntegrity: StateFlow<PackIntegrity> = _packIntegrity.asStateFlow()
 
+  private val _kokoroDownloadState = MutableStateFlow<DownloadState>(
+    if (kokoroModelManager.isModelReady()) DownloadState.Verified else DownloadState.Idle
+  )
+  val kokoroDownloadState: StateFlow<DownloadState> = _kokoroDownloadState.asStateFlow()
+
+  private val _kokoroPackIntegrity = MutableStateFlow(
+    PackIntegrity(
+      packReady = false,
+      presentFiles = 0,
+      presentBytes = 0L,
+      missingFiles = KokoroModelManager.REQUIRED_FILES,
+      hashMismatches = emptyList()
+    )
+  )
+  val kokoroPackIntegrity: StateFlow<PackIntegrity> = _kokoroPackIntegrity.asStateFlow()
+
   // Round 10 (Task 3): debug-only pack fault-injection card. debugBuild is
   // captured at construction; the card is rendered only in debug builds.
   val debugBuild: Boolean = BuildConfig.DEBUG
@@ -75,6 +97,8 @@ class ModelViewModel @Inject constructor(
 
   @Volatile
   private var benchmarkRunning = false
+  private var kokoroDownloadJob: Job? = null
+  private var kokoroClearJob: Job? = null
 
   init {
     // Round 10 (Task 3): route debug-hook events into the UI note line.
@@ -88,7 +112,61 @@ class ModelViewModel @Inject constructor(
         _downloadState.value = DownloadState.Error("sha256 mismatch in pack files: $mismatches")
       }
       _packIntegrity.value = assessPack()
+      val (_, kokoroMismatches) = kokoroModelManager.verifyChecksums()
+      if (kokoroMismatches.isNotEmpty() && kokoroModelManager.isModelReady()) {
+        _kokoroDownloadState.value = DownloadState.Error(
+          "Kokoro SHA-256 mismatch in pack files: $kokoroMismatches"
+        )
+      }
+      _kokoroPackIntegrity.value = assessKokoroPack()
       refreshModelState()
+    }
+  }
+
+  fun startKokoroDownload() {
+    if (kokoroDownloadJob?.isActive == true || kokoroClearJob?.isActive == true) return
+    kokoroDownloadJob = viewModelScope.launch {
+      try {
+        val wifiOnly = settingsRepository.appSettings.first().wifiOnlyDownloads
+        kokoroModelManager.downloadModel(wifiOnly = wifiOnly) { state ->
+          _kokoroDownloadState.value = state
+        }.onSuccess {
+          _kokoroPackIntegrity.value = withContext(Dispatchers.IO) { assessKokoroPack() }
+        }.onFailure { error ->
+          _kokoroDownloadState.value = DownloadState.Error(error.message ?: "Kokoro download failed")
+          _kokoroPackIntegrity.value = withContext(Dispatchers.IO) { assessKokoroPack() }
+        }
+      } catch (cancelled: CancellationException) {
+        throw cancelled
+      } catch (error: Exception) {
+        _kokoroDownloadState.value = DownloadState.Error(
+          error.message ?: "Unable to load Kokoro download settings"
+        )
+        _kokoroPackIntegrity.value = withContext(Dispatchers.IO) { assessKokoroPack() }
+      }
+    }
+  }
+
+  fun clearKokoroModelData() {
+    if (kokoroDownloadJob?.isActive == true ||
+      kokoroClearJob?.isActive == true ||
+      _kokoroDownloadState.value is DownloadState.Downloading ||
+      _kokoroDownloadState.value is DownloadState.Verifying ||
+      _kokoroDownloadState.value is DownloadState.WaitingForWifi
+    ) return
+    _kokoroDownloadState.value = DownloadState.Verifying("Clearing Kokoro model data…")
+    kokoroClearJob = viewModelScope.launch(Dispatchers.IO) {
+      kokoroEngineManager.releaseAndRun { kokoroModelManager.clearModelData() }
+        .onSuccess {
+          _kokoroDownloadState.value = DownloadState.Idle
+          _kokoroPackIntegrity.value = assessKokoroPack()
+        }
+        .onFailure { error ->
+          _kokoroDownloadState.value = DownloadState.Error(
+            error.message ?: "Unable to clear Kokoro model data"
+          )
+          _kokoroPackIntegrity.value = assessKokoroPack()
+        }
     }
   }
 
@@ -201,6 +279,7 @@ class ModelViewModel @Inject constructor(
       val integrity = assessPack()
       _rtfStats.value = stats
       _packIntegrity.value = integrity
+      _kokoroPackIntegrity.value = assessKokoroPack()
       // Keep the headline honest in both directions, but never clobber an
       // in-flight download/verify state.
       val state = _downloadState.value
@@ -230,6 +309,21 @@ class ModelViewModel @Inject constructor(
     val (missing, mismatches) = modelManager.verifyChecksums()
     return PackIntegrity(
       packReady = modelManager.isModelReady(),
+      presentFiles = present.size,
+      presentBytes = present.sumOf { it.length() },
+      missingFiles = missing,
+      hashMismatches = mismatches
+    )
+  }
+
+  private fun assessKokoroPack(): PackIntegrity {
+    val modelDir = kokoroModelManager.getModelDir()
+    val present = KokoroModelManager.REQUIRED_FILES
+      .map { File(modelDir, it) }
+      .filter { it.isFile && it.length() > 0L }
+    val (missing, mismatches) = kokoroModelManager.verifyChecksums()
+    return PackIntegrity(
+      packReady = kokoroModelManager.isModelReady() && mismatches.isEmpty(),
       presentFiles = present.size,
       presentBytes = present.sumOf { it.length() },
       missingFiles = missing,

@@ -70,16 +70,17 @@ fun LicensesScreen(onBackClick: () -> Unit) {
     Section(
       title = "AI narration",
       body = listOf(
-        "Narration in Rustle is generated on your device by the Supertonic-3 " +
-          "speech model (Supertone Inc.). Your books, text and audio never " +
-          "leave your phone.",
+        "Narration in Rustle is generated on your device by either the " +
+          "Supertonic-3 speech model (Supertone Inc.) or Kokoro-82M v1.0. " +
+          "Your books, text and audio never leave your phone.",
         "The int8 ONNX build of the model is provided by the open-source " +
           "sherpa-onnx project and downloaded once from Hugging Face with " +
           "integrity verification.",
         "The Supertonic-3 model is licensed under the BigScience OpenRAIL-M " +
           "License, which permits commercial use and redistribution and " +
           "includes use restrictions that apply to everyone in the chain — " +
-          "the full license text follows below."
+          "the full license text follows below. Kokoro-82M v1.0 model weights " +
+          "are provided under Apache License 2.0."
       )
     )
     Section(
@@ -99,6 +100,7 @@ fun LicensesScreen(onBackClick: () -> Unit) {
       body = listOf(
         "sherpa-onnx — Apache License 2.0 — k2-fsa (used for on-device " +
           "inference of the speech model)",
+        "Kokoro-82M v1.0 — Apache License 2.0 — hexgrad (model weights)",
         "ONNX Runtime — MIT License — Microsoft (neural network runtime)",
         "Jetpack Compose, Media3, DataStore and other AndroidX libraries — " +
           "Apache License 2.0 — Google LLC",
@@ -109,7 +111,7 @@ fun LicensesScreen(onBackClick: () -> Unit) {
     LicenseBlock(title = "Supertonic-3 — BigScience OpenRAIL-M License") {
       rawText(context, R.raw.license_openrail_m)
     }
-    LicenseBlock(title = "sherpa-onnx — Apache License 2.0") {
+    LicenseBlock(title = "sherpa-onnx and Kokoro-82M — Apache License 2.0") {
       rawText(context, R.raw.license_apache_2)
     }
     LicenseBlock(title = "ONNX Runtime — MIT License") {

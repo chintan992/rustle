@@ -1,5 +1,7 @@
 package com.chint.audiobook.ui.onboarding
 
+import com.chint.audiobook.data.model.TtsEngine
+
 /**
  * User-facing voice catalog. The storage/engine id ("F2") stays the key in
  * prefs and TTS calls; these human names + descriptions are display-only,
@@ -30,9 +32,32 @@ object VoiceCatalog {
     VoicePreset("M5", "Arthur", "Classic storyteller")
   )
 
+  val kokoroPresets = listOf(
+    VoicePreset("af_heart", "Heart", "Warm American English narrator", isDefault = true),
+    VoicePreset("af_bella", "Bella", "Clear American English narrator"),
+    VoicePreset("af_nicole", "Nicole", "Light American English narrator"),
+    VoicePreset("af_nova", "Nova", "Bright American English narrator"),
+    VoicePreset("am_fenrir", "Fenrir", "Low American English narrator"),
+    VoicePreset("am_michael", "Michael", "Steady American English narrator"),
+    VoicePreset("am_puck", "Puck", "Lively American English narrator"),
+    VoicePreset("bf_emma", "Emma", "British English narrator"),
+    VoicePreset("bf_lily", "Lily", "British English narrator"),
+    VoicePreset("bm_george", "George", "British English narrator")
+  )
+
+  fun presetsFor(engine: TtsEngine): List<VoicePreset> =
+    if (engine == TtsEngine.KOKORO) kokoroPresets else presets
+
+  fun defaultId(engine: TtsEngine): String =
+    presetsFor(engine).firstOrNull { it.isDefault }?.id ?: presetsFor(engine).first().id
+
+  fun contains(engine: TtsEngine, id: String): Boolean =
+    presetsFor(engine).any { it.id == id.trim() }
+
   /** Resolves a stored id; unknown ids fall back to showing the raw id. */
   fun byId(id: String): VoicePreset =
     presets.firstOrNull { it.id == id.trim().uppercase() }
+      ?: kokoroPresets.firstOrNull { it.id == id.trim() }
       ?: VoicePreset(id = id, name = id, description = "")
 
   /** Short display form for chips and status lines ("Clara"). */

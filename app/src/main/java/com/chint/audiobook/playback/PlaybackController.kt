@@ -12,6 +12,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.chint.audiobook.data.model.Book
 import com.chint.audiobook.data.model.Segment
+import com.chint.audiobook.data.model.TtsEngine
 import com.chint.audiobook.engine.SegmentVoices
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -310,7 +311,9 @@ class PlaybackController(private val context: Context) {
     bookDir: File,
     chapterIndex: Int,
     segments: List<Segment>,
-    dialogueVoice: String? = null
+    dialogueVoice: String? = null,
+    engine: TtsEngine = TtsEngine.SUPERTONIC,
+    narrationVoice: String = "F2"
   ): List<Segment> {
     // Round 10 (Task 1): the playlist is the distinct-hash projection of segments
     // (one item per unique WAV), exactly what the chapterFullyAppended distinct-hash
@@ -329,11 +332,14 @@ class PlaybackController(private val context: Context) {
     try {
       exoPlayer.clearMediaItems()
 
-      val chapterAudioDir = File(bookDir, "audio/ch${"%04d".format(chapterIndex)}")
-      val globalCacheAudioDir = File(bookDir, "cache/audio")
+      val chapterAudioDir = SegmentVoices.chapterAudioDir(bookDir, chapterIndex, engine)
+      val globalCacheAudioDir = SegmentVoices.globalCacheAudioDir(bookDir, engine)
 
       // Tier 2: Check if this chapter is already compressed into chapter.m4a + chapter-index.json
-      if (com.chint.audiobook.engine.AudioCompressor.isChapterCompressed(chapterAudioDir)) {
+      if (com.chint.audiobook.engine.AudioCompressor.isChapterCompressedFor(
+          chapterAudioDir, engine, narrationVoice, dialogueVoice, anchors.map { it.hash }
+        )
+      ) {
         val chapterIndexObj = com.chint.audiobook.engine.AudioCompressor.loadIndex(chapterAudioDir)
         val m4aFile = com.chint.audiobook.engine.AudioCompressor.compressedFile(chapterAudioDir)
         if (chapterIndexObj != null) {
@@ -362,7 +368,7 @@ class PlaybackController(private val context: Context) {
       fun resolveWavFile(hash: String): File? =
         SegmentVoices.findWav(
           chapterAudioDir, globalCacheAudioDir, hash,
-          textByHash[hash] ?: "", dialogueVoice
+          textByHash[hash] ?: "", dialogueVoice, engine, narrationVoice
         )
 
       // Round 10 (Task 1): seed only the CONTIGUOUS cached anchor prefix. A far-tail

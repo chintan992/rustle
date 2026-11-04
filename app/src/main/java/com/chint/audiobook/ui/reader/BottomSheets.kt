@@ -63,6 +63,7 @@ import com.chint.audiobook.data.model.ReaderFontFamily
 import com.chint.audiobook.data.model.ReaderLineSpacing
 import com.chint.audiobook.theme.toFontFamily
 import com.chint.audiobook.ui.onboarding.VoiceCatalog
+import com.chint.audiobook.data.model.TtsEngine
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,6 +184,7 @@ fun ContentsSheet(
 @Composable
 fun VoiceSheet(
   currentVoice: String,
+  ttsEngine: TtsEngine = TtsEngine.SUPERTONIC,
   // Multi-voice: current dialogue voice (null = off) + pick callback.
   currentDialogueVoice: String? = null,
   onDialogueVoiceSelect: (String?, applyToAllBooks: Boolean) -> Unit = { _, _ -> },
@@ -235,7 +237,7 @@ fun VoiceSheet(
           )
           Spacer(modifier = Modifier.height(8.dp))
           LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(VoiceCatalog.presets) { preset ->
+            items(VoiceCatalog.presetsFor(ttsEngine)) { preset ->
               val id = preset.id
               val isCurrent = (id == currentVoice)
               Card(
@@ -319,7 +321,7 @@ fun VoiceSheet(
                 )
               }
             }
-            items(VoiceCatalog.presets) { preset ->
+            items(VoiceCatalog.presetsFor(ttsEngine)) { preset ->
               val id = preset.id
               val isCurrent = (id == currentDialogueVoice)
               Card(

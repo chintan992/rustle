@@ -18,7 +18,7 @@ import java.io.File
 import kotlin.math.roundToInt
 
 /**
- * Real Supertonic-3 engine on sherpa-onnx (official Android AAR, app/libs/sherpa-onnx-1.13.8.aar).
+ * Real Supertonic-3 engine on sherpa-onnx (official Android AAR, app/libs/sherpa-onnx-2.0.1.aar).
  *
  * Config mirrors the sherpa-onnx project's own Kotlin example
  * (kotlin-api-examples/test_supertonic_tts.kt) for the int8 pack
@@ -229,9 +229,12 @@ class TtsEngineManager(private val context: Context? = null) {
     return out
   }
 
-  internal fun createWavHeaderAndData(pcmData: ByteArray): ByteArray {
+  internal fun createWavHeaderAndData(
+    pcmData: ByteArray,
+    outputSampleRate: Int = sampleRate
+  ): ByteArray {
     val totalDataLen = pcmData.size + 36
-    val byteRate = sampleRate * numChannels * bitsPerSample / 8
+    val byteRate = outputSampleRate * numChannels * bitsPerSample / 8
 
     val wavStream = ByteArrayOutputStream()
     val out = DataOutputStream(wavStream)
@@ -246,7 +249,7 @@ class TtsEngineManager(private val context: Context? = null) {
     out.writeInt(Integer.reverseBytes(16))
     out.writeShort(java.lang.Short.reverseBytes(1.toShort()).toInt())
     out.writeShort(java.lang.Short.reverseBytes(numChannels.toShort()).toInt())
-    out.writeInt(Integer.reverseBytes(sampleRate))
+    out.writeInt(Integer.reverseBytes(outputSampleRate))
     out.writeInt(Integer.reverseBytes(byteRate))
     out.writeShort(java.lang.Short.reverseBytes((numChannels * bitsPerSample / 8).toShort()).toInt())
     out.writeShort(java.lang.Short.reverseBytes(bitsPerSample.toShort()).toInt())

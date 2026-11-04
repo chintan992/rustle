@@ -13,6 +13,7 @@ import com.chint.audiobook.data.model.PlaybackState
 import com.chint.audiobook.data.model.ReaderFontFamily
 import com.chint.audiobook.data.model.ReaderLineSpacing
 import com.chint.audiobook.data.model.ThemeMode
+import com.chint.audiobook.data.model.TtsEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -25,7 +26,9 @@ class SettingsRepository @Inject constructor(
 ) : com.chint.audiobook.domain.repository.UserSettingsRepository {
 
   private object Keys {
+    val TTS_ENGINE = stringPreferencesKey("tts_engine")
     val DEFAULT_VOICE = stringPreferencesKey("default_voice")
+    val KOKORO_VOICE = stringPreferencesKey("kokoro_voice")
     val HIGHLIGHT_ENABLED = booleanPreferencesKey("highlight_enabled")
     // Cache/prep round (B2): the dead lookahead_seconds key is retired — its
     // DataStore entry (if any) is simply ignored from now on.
@@ -41,6 +44,7 @@ class SettingsRepository @Inject constructor(
 
     // Multi-voice: separate narrator for quoted dialogue (null = off).
     val DIALOGUE_VOICE = stringPreferencesKey("dialogue_voice")
+    val KOKORO_DIALOGUE_VOICE = stringPreferencesKey("kokoro_dialogue_voice")
     // Beta round (WS1): expressive narration auto-cue insertion.
     val EXPRESSIVE_NARRATION = booleanPreferencesKey("expressive_narration")
     // Q2/Q5: battery guidance flag + yearly goal.
@@ -64,7 +68,9 @@ class SettingsRepository @Inject constructor(
 
   override val appSettings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
     AppSettings(
+      ttsEngine = TtsEngine.fromStorageKey(prefs[Keys.TTS_ENGINE]),
       defaultVoice = prefs[Keys.DEFAULT_VOICE] ?: "F2",
+      kokoroVoice = prefs[Keys.KOKORO_VOICE] ?: "af_heart",
       highlightEnabled = prefs[Keys.HIGHLIGHT_ENABLED] ?: true,
       wifiOnlyDownloads = prefs[Keys.WIFI_ONLY_DOWNLOADS] ?: true,
       batterySaverEnabled = prefs[Keys.BATTERY_SAVER_ENABLED] ?: false,
@@ -74,6 +80,7 @@ class SettingsRepository @Inject constructor(
       readerFontFamily = ReaderFontFamily.fromStorageKey(prefs[Keys.READER_FONT_FAMILY]),
       readerLineSpacing = ReaderLineSpacing.fromStorageKey(prefs[Keys.READER_LINE_SPACING]),
       dialogueVoice = prefs[Keys.DIALOGUE_VOICE],
+      kokoroDialogueVoice = prefs[Keys.KOKORO_DIALOGUE_VOICE],
       expressiveNarration = prefs[Keys.EXPRESSIVE_NARRATION] ?: true,
       batteryGuidanceDismissed = prefs[Keys.BATTERY_GUIDANCE_DISMISSED] ?: false,
       yearlyGoalHours = prefs[Keys.YEARLY_GOAL_HOURS] ?: 0,
@@ -88,7 +95,9 @@ class SettingsRepository @Inject constructor(
   override suspend fun updateAppSettings(transform: (AppSettings) -> AppSettings) {
     context.dataStore.edit { prefs ->
       val current = AppSettings(
+        ttsEngine = TtsEngine.fromStorageKey(prefs[Keys.TTS_ENGINE]),
         defaultVoice = prefs[Keys.DEFAULT_VOICE] ?: "F2",
+        kokoroVoice = prefs[Keys.KOKORO_VOICE] ?: "af_heart",
         highlightEnabled = prefs[Keys.HIGHLIGHT_ENABLED] ?: true,
         wifiOnlyDownloads = prefs[Keys.WIFI_ONLY_DOWNLOADS] ?: true,
         batterySaverEnabled = prefs[Keys.BATTERY_SAVER_ENABLED] ?: false,
@@ -98,6 +107,7 @@ class SettingsRepository @Inject constructor(
         readerFontFamily = ReaderFontFamily.fromStorageKey(prefs[Keys.READER_FONT_FAMILY]),
         readerLineSpacing = ReaderLineSpacing.fromStorageKey(prefs[Keys.READER_LINE_SPACING]),
         dialogueVoice = prefs[Keys.DIALOGUE_VOICE],
+        kokoroDialogueVoice = prefs[Keys.KOKORO_DIALOGUE_VOICE],
         expressiveNarration = prefs[Keys.EXPRESSIVE_NARRATION] ?: true,
         batteryGuidanceDismissed = prefs[Keys.BATTERY_GUIDANCE_DISMISSED] ?: false,
         yearlyGoalHours = prefs[Keys.YEARLY_GOAL_HOURS] ?: 0,
@@ -108,7 +118,9 @@ class SettingsRepository @Inject constructor(
         skipSilence = prefs[Keys.SKIP_SILENCE] ?: false
       )
       val updated = transform(current)
+      prefs[Keys.TTS_ENGINE] = updated.ttsEngine.name
       prefs[Keys.DEFAULT_VOICE] = updated.defaultVoice
+      prefs[Keys.KOKORO_VOICE] = updated.kokoroVoice
       prefs[Keys.HIGHLIGHT_ENABLED] = updated.highlightEnabled
       prefs[Keys.WIFI_ONLY_DOWNLOADS] = updated.wifiOnlyDownloads
       prefs[Keys.BATTERY_SAVER_ENABLED] = updated.batterySaverEnabled
@@ -118,6 +130,11 @@ class SettingsRepository @Inject constructor(
       prefs[Keys.READER_FONT_FAMILY] = updated.readerFontFamily.name
       prefs[Keys.READER_LINE_SPACING] = updated.readerLineSpacing.name
       if (updated.dialogueVoice != null) prefs[Keys.DIALOGUE_VOICE] = updated.dialogueVoice else prefs.remove(Keys.DIALOGUE_VOICE)
+      if (updated.kokoroDialogueVoice != null) {
+        prefs[Keys.KOKORO_DIALOGUE_VOICE] = updated.kokoroDialogueVoice
+      } else {
+        prefs.remove(Keys.KOKORO_DIALOGUE_VOICE)
+      }
       prefs[Keys.EXPRESSIVE_NARRATION] = updated.expressiveNarration
       prefs[Keys.BATTERY_GUIDANCE_DISMISSED] = updated.batteryGuidanceDismissed
       prefs[Keys.YEARLY_GOAL_HOURS] = updated.yearlyGoalHours

@@ -15,6 +15,17 @@ enum class ThemeMode {
   }
 }
 
+@Serializable
+enum class TtsEngine {
+  SUPERTONIC,
+  KOKORO;
+
+  companion object {
+    fun fromStorageKey(key: String?): TtsEngine =
+      entries.firstOrNull { it.name == key } ?: SUPERTONIC
+  }
+}
+
 /** UI Round 4 (R5): reader transcript typeface. */
 @Serializable
 enum class ReaderFontFamily {
@@ -47,7 +58,9 @@ enum class ReaderLineSpacing(val multiplier: Float) {
 
 @Serializable
 data class AppSettings(
+  val ttsEngine: TtsEngine = TtsEngine.SUPERTONIC,
   val defaultVoice: String = "F2",
+  val kokoroVoice: String = "af_heart",
   val highlightEnabled: Boolean = true,
   val wifiOnlyDownloads: Boolean = true,
   val batterySaverEnabled: Boolean = false,
@@ -66,6 +79,7 @@ data class AppSettings(
   // Multi-voice round: separate narrator for quoted dialogue. null = off
   // (everything renders in the narration voice).
   val dialogueVoice: String? = null,
+  val kokoroDialogueVoice: String? = null,
   // Beta round (WS1): auto-insert measured-safe expression cues (<laughter> on
   // laugh-syllable runs, <sigh>/<cough> on stage directions) at import time.
   // Affects newly imported/prepped chapters; the English-measured tag set is

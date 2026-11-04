@@ -25,8 +25,9 @@ class AudioCacheManager {
   private val json = Json { ignoreUnknownKeys = true }
 
   /** Total bytes of rendered WAVs for one book (chapter dirs + global cache). */
-  fun bookAudioBytes(bookDir: File): Long = directoryBytes(File(bookDir, AUDIO_DIR)) +
-    directoryBytes(File(bookDir, GLOBAL_CACHE_DIR))
+  fun bookAudioBytes(bookDir: File): Long =
+    listOf(AUDIO_DIR, KOKORO_AUDIO_DIR, GLOBAL_CACHE_DIR, KOKORO_GLOBAL_CACHE_DIR)
+      .sumOf { directoryBytes(File(bookDir, it)) }
 
   /** Checks if a chapter has been compressed to AAC LC (.m4a) with an index sidecar. */
   fun isChapterCompressed(bookDir: File, chapterIndex: Int): Boolean {
@@ -67,7 +68,7 @@ class AudioCacheManager {
    */
   fun clearAudioCache(bookDir: File): Boolean {
     var allDeleted = true
-    for (dirName in listOf(AUDIO_DIR, GLOBAL_CACHE_DIR)) {
+    for (dirName in listOf(AUDIO_DIR, KOKORO_AUDIO_DIR, GLOBAL_CACHE_DIR, KOKORO_GLOBAL_CACHE_DIR)) {
       val dir = File(bookDir, dirName)
       if (dir.exists() && !dir.deleteRecursively()) allDeleted = false
     }
@@ -109,9 +110,10 @@ class AudioCacheManager {
   suspend fun enforceCap(bookDir: File, capBytes: Long, keepChapterIndexes: Set<Int>): List<Int> =
     withContext(Dispatchers.IO) {
       if (capBytes <= 0L) return@withContext emptyList()
-      val audioRoot = File(bookDir, AUDIO_DIR)
-      val chapterDirs = audioRoot.listFiles { f -> f.isDirectory && f.name.startsWith("ch") }
-        ?.sortedBy { it.name } ?: return@withContext emptyList()
+      val chapterDirs = listOf(AUDIO_DIR, KOKORO_AUDIO_DIR).flatMap { rootName ->
+        File(bookDir, rootName).listFiles { f -> f.isDirectory && f.name.startsWith("ch") }
+          ?.toList().orEmpty()
+      }.sortedBy { it.absolutePath }
       if (chapterDirs.isEmpty()) return@withContext emptyList()
 
       val stamps = readAccessStamps(bookDir)
@@ -120,15 +122,16 @@ class AudioCacheManager {
         ChapterCacheEntry(
           chapterIndex = index,
           sizeBytes = directoryBytes(dir),
-          lastAccessMs = stamps[index] ?: dir.lastModified()
+          lastAccessMs = stamps[index] ?: dir.lastModified(),
+          directory = dir
         )
       }
 
-      val toEvict = selectChaptersToEvict(entries, capBytes, keepChapterIndexes)
+      val toEvict = selectEntriesToEvict(entries, capBytes, keepChapterIndexes)
       var evicted = emptyList<Int>()
       for (entry in toEvict) {
-        val dir = File(audioRoot, "ch${"%04d".format(entry)}")
-        if (dir.deleteRecursively()) evicted = evicted + entry
+        val dir = entry.directory ?: continue
+        if (dir.deleteRecursively()) evicted = evicted + entry.chapterIndex
       }
       evicted
     }
@@ -141,12 +144,15 @@ class AudioCacheManager {
   data class ChapterCacheEntry(
     val chapterIndex: Int,
     val sizeBytes: Long,
-    val lastAccessMs: Long
+    val lastAccessMs: Long,
+    val directory: File? = null
   )
 
   companion object {
     private const val AUDIO_DIR = "audio"
+    private const val KOKORO_AUDIO_DIR = "audio-kokoro"
     private const val GLOBAL_CACHE_DIR = "cache/audio"
+    private const val KOKORO_GLOBAL_CACHE_DIR = "cache/audio-kokoro"
     private const val ACCESS_SIDECAR = "audio-access.json"
     private val MapSerializer = MapSerializer(String.serializer(), Long.serializer())
 
@@ -161,19 +167,25 @@ class AudioCacheManager {
       entries: List<ChapterCacheEntry>,
       capBytes: Long,
       keepChapterIndexes: Set<Int>
-    ): List<Int> {
+    ): List<Int> = selectEntriesToEvict(entries, capBytes, keepChapterIndexes).map { it.chapterIndex }
+
+    private fun selectEntriesToEvict(
+      entries: List<ChapterCacheEntry>,
+      capBytes: Long,
+      keepChapterIndexes: Set<Int>
+    ): List<ChapterCacheEntry> {
       if (capBytes <= 0L) return emptyList()
       var total = entries.sumOf { it.sizeBytes }
       if (total <= capBytes) return emptyList()
 
       val candidates = entries
         .filter { it.sizeBytes > 0L && it.chapterIndex !in keepChapterIndexes }
-        .sortedWith(compareBy({ it.lastAccessMs }, { it.chapterIndex }))
+        .sortedWith(compareBy({ it.lastAccessMs }, { it.chapterIndex }, { it.directory?.absolutePath.orEmpty() }))
 
-      val evicted = mutableListOf<Int>()
+      val evicted = mutableListOf<ChapterCacheEntry>()
       for (candidate in candidates) {
         if (total <= capBytes) break
-        evicted.add(candidate.chapterIndex)
+        evicted.add(candidate)
         total -= candidate.sizeBytes
       }
       return evicted

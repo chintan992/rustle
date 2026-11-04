@@ -12,6 +12,8 @@ import com.chint.audiobook.domain.usecase.ObserveSettingsUseCase
 import com.chint.audiobook.domain.usecase.UpdateSettingsUseCase
 import com.chint.audiobook.data.repository.LedgerRepository
 import com.chint.audiobook.engine.ModelManager
+import com.chint.audiobook.engine.KokoroModelManager
+import com.chint.audiobook.engine.KokoroTtsEngineManager
 import com.chint.audiobook.engine.TtsEngineManager
 import com.chint.audiobook.engine.RtfBenchmark
 import dagger.Binds
@@ -64,6 +66,14 @@ object ApplicationFilesModule {
   @Provides
   @Singleton
   fun provideModelManager(@ApplicationContext context: Context) = ModelManager(context)
+
+  @Provides
+  @Singleton
+  fun provideKokoroModelManager(@ApplicationContext context: Context) = KokoroModelManager(context)
+
+  @Provides
+  @Singleton
+  fun provideKokoroTtsEngineManager() = KokoroTtsEngineManager()
 
   @Provides
   @Singleton

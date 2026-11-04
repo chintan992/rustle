@@ -51,7 +51,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.chint.audiobook.R
 import com.chint.audiobook.engine.ModelManager
+import com.chint.audiobook.engine.KokoroModelManager
+import com.chint.audiobook.engine.KokoroTtsEngineManager
 import com.chint.audiobook.engine.TtsEngineManager
+import com.chint.audiobook.data.model.TtsEngine
+import kotlinx.coroutines.CancellationException
 import com.chint.audiobook.playback.PlaybackController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,24 +64,34 @@ import java.io.File
 
 @Composable
 fun VoiceSetupScreen(
+  engine: TtsEngine = TtsEngine.SUPERTONIC,
   onComplete: (selectedVoice: String, highlightEnabled: Boolean) -> Unit,
   onSkip: () -> Unit
 ) {
   val context = LocalContext.current
   val coroutineScope = rememberCoroutineScope()
   val engineManager = remember(context) { TtsEngineManager(context) }
+  val kokoroEngineManager = remember(context) { KokoroTtsEngineManager() }
+  val kokoroModelManager = remember(context) { KokoroModelManager(context) }
   val playbackController = remember(context) { PlaybackController(context) }
-  DisposableEffect(playbackController, engineManager) {
+  DisposableEffect(playbackController, engineManager, kokoroEngineManager) {
     onDispose {
       playbackController.release()
       engineManager.release()
+      kokoroEngineManager.release()
     }
   }
-  // The engine loads from the Supertonic pack dir, not app cache.
-  val modelDir = remember(context) { ModelManager(context).getModelDir() }
+  val modelDir = remember(context, engine) {
+    if (engine == TtsEngine.KOKORO) kokoroModelManager.getModelDir()
+    else ModelManager(context).getModelDir()
+  }
 
-  var selectedVoice by rememberSaveable { mutableStateOf("F2") }
+  val voicePresets = VoiceCatalog.presetsFor(engine)
+  var selectedVoice by rememberSaveable(engine) {
+    mutableStateOf(VoiceCatalog.defaultId(engine))
+  }
   var highlightEnabled by rememberSaveable { mutableStateOf(true) }
+  var previewError by rememberSaveable { mutableStateOf<String?>(null) }
   val voiceGridState = rememberLazyGridState()
 
   Column(
@@ -120,7 +134,7 @@ fun VoiceSetupScreen(
       verticalArrangement = Arrangement.spacedBy(8.dp),
       horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-      items(VoiceCatalog.presets) { preset ->
+      items(voicePresets) { preset ->
         val id = preset.id
         val isSelected = (id == selectedVoice)
         Card(
@@ -161,16 +175,27 @@ fun VoiceSetupScreen(
               onClick = {
                 coroutineScope.launch {
                   val previewSampleText = "Hello! This is ${preset.name}."
-                  // OfflineTts init + generate are CPU-heavy native calls:
-                  // never run them on the UI thread (ANR on the S0 screen).
-                  val previewFile = withContext(Dispatchers.IO) {
-                    val wavBytes = engineManager.generateAudioWav(previewSampleText, id, modelDir)
-                    val file = File(context.cacheDir, "voice_preview_$id.wav")
-                    file.writeBytes(wavBytes)
-                    file
+                  try {
+                    // OfflineTts init + generate are CPU-heavy native calls:
+                    // never run them on the UI thread.
+                    val previewFile = withContext(Dispatchers.IO) {
+                      val wavBytes = if (engine == TtsEngine.KOKORO) {
+                        kokoroEngineManager.generateAudioWav(previewSampleText, id, modelDir)
+                      } else {
+                        engineManager.generateAudioWav(previewSampleText, id, modelDir)
+                      }
+                      val file = File(context.cacheDir, "voice_preview_${engine.name}_$id.wav")
+                      file.writeBytes(wavBytes)
+                      file
+                    }
+                    playbackController.appendSegmentWav(previewFile)
+                    playbackController.play()
+                    previewError = null
+                  } catch (cancelled: CancellationException) {
+                    throw cancelled
+                  } catch (error: Exception) {
+                    previewError = error.message ?: "Voice preview failed"
                   }
-                  playbackController.appendSegmentWav(previewFile)
-                  playbackController.play()
                 }
               },
               modifier = Modifier.semantics { contentDescription = "Preview voice $id" }
@@ -184,6 +209,11 @@ fun VoiceSetupScreen(
           }
         }
       }
+    }
+
+    previewError?.let {
+      Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+      Spacer(modifier = Modifier.height(8.dp))
     }
 
     Spacer(modifier = Modifier.height(16.dp))

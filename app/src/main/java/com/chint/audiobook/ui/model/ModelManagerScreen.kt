@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.chint.audiobook.engine.DownloadState
 import com.chint.audiobook.engine.DownloadMath
 import com.chint.audiobook.engine.ModelManager
+import com.chint.audiobook.engine.KokoroModelManager
 import com.chint.audiobook.engine.RtfBenchmark
 import com.chint.audiobook.engine.RtfBenchmarkResult
 import com.chint.audiobook.engine.RtfStats
@@ -45,13 +46,18 @@ fun ModelManagerScreen(
   downloadState: DownloadState,
   benchmarkResult: RtfBenchmarkResult?,
   packIntegrity: PackIntegrity,
+  kokoroDownloadState: DownloadState,
+  kokoroPackIntegrity: PackIntegrity,
   rtfStats: RtfStats,
   onDownloadClick: () -> Unit,
   onClearModelData: () -> Unit,
+  onDownloadKokoroClick: () -> Unit,
+  onClearKokoroModelData: () -> Unit,
   onRunBenchmarkClick: () -> Unit,
   onBackClick: () -> Unit
 ) {
   var showClearConfirmation by remember { mutableStateOf(false) }
+  var showKokoroClearConfirmation by remember { mutableStateOf(false) }
 
   Column(
     modifier = Modifier
@@ -170,6 +176,110 @@ fun ModelManagerScreen(
           )
         }
       }
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+      Column(modifier = Modifier.padding(16.dp)) {
+        Text("Kokoro-82M v1.0 fp32", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          "English-focused secondary engine. Separate download: 4 files, about 360 MB. " +
+            "Other languages continue to use Supertonic."
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        when (kokoroDownloadState) {
+          is DownloadState.Idle -> {
+            Text("Kokoro model files not downloaded")
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onDownloadKokoroClick) { Text("Download Kokoro (~360 MB)") }
+          }
+          is DownloadState.WaitingForWifi -> {
+            Text(kokoroDownloadState.message, color = MaterialTheme.colorScheme.tertiary)
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+          }
+          is DownloadState.Downloading -> {
+            Text(
+              "Downloading ${kokoroDownloadState.fileIndex}/${kokoroDownloadState.totalFiles}: " +
+                "${kokoroDownloadState.currentFile} " +
+                "(${(kokoroDownloadState.fileFraction * 100).toInt()}%)"
+            )
+            Text(
+              "${kokoroDownloadState.doneBytes / 1_000_000} of " +
+                "${kokoroDownloadState.totalBytes / 1_000_000} MB overall",
+              style = MaterialTheme.typography.bodySmall
+            )
+            LinearProgressIndicator(
+              progress = {
+                DownloadMath.overallFraction(
+                  kokoroDownloadState.doneBytes,
+                  kokoroDownloadState.totalBytes
+                )
+              },
+              modifier = Modifier.fillMaxWidth()
+            )
+          }
+          is DownloadState.Verifying -> {
+            Text(kokoroDownloadState.message)
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+          }
+          is DownloadState.Verified -> {
+            Text("Kokoro pack ready and SHA-256 verified.")
+          }
+          is DownloadState.Error -> {
+            Text("Error: ${kokoroDownloadState.message}", color = MaterialTheme.colorScheme.error)
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onDownloadKokoroClick) { Text("Retry Kokoro Download") }
+          }
+        }
+
+        if (kokoroPackIntegrity.packReady) {
+          Text(
+            "Files on disk: ${kokoroPackIntegrity.presentFiles}/${KokoroModelManager.REQUIRED_FILES.size} " +
+              "(${kokoroPackIntegrity.presentBytes / 1_000_000} MB) - SHA-256 OK",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        } else if (kokoroPackIntegrity.hashMismatches.isNotEmpty()) {
+          Text(
+            "SHA-256 mismatch: ${kokoroPackIntegrity.hashMismatches}",
+            color = MaterialTheme.colorScheme.error
+          )
+        } else if (kokoroPackIntegrity.missingFiles.isNotEmpty()) {
+          Text("Missing: ${kokoroPackIntegrity.missingFiles}", color = MaterialTheme.colorScheme.error)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+          onClick = { showKokoroClearConfirmation = true },
+          enabled = kokoroDownloadState !is DownloadState.Downloading &&
+            kokoroDownloadState !is DownloadState.Verifying &&
+            kokoroDownloadState !is DownloadState.WaitingForWifi
+        ) {
+          Text("Clear Kokoro model data")
+        }
+      }
+    }
+
+    if (showKokoroClearConfirmation) {
+      AlertDialog(
+        onDismissRequest = { showKokoroClearConfirmation = false },
+        title = { Text("Clear Kokoro model data?") },
+        text = {
+          Text("This removes only the Kokoro-82M files and incomplete Kokoro downloads.")
+        },
+        confirmButton = {
+          TextButton(
+            onClick = {
+              showKokoroClearConfirmation = false
+              onClearKokoroModelData()
+            }
+          ) { Text("Clear") }
+        },
+        dismissButton = {
+          TextButton(onClick = { showKokoroClearConfirmation = false }) { Text("Cancel") }
+        }
+      )
     }
 
     Spacer(modifier = Modifier.height(16.dp))

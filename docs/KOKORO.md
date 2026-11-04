@@ -91,9 +91,12 @@ The rail-pinning bug (sherpa-onnx 1.13.4, Android int8 path) was
 **engine-state dependent**, never reproduced on x86_64, never on fp32, and
 was **fixed 2026-10-26 by PR #4087 / sherpa-onnx v2.0.1**.
 
-**Conclusion: ship the fp32 bundle (~334 MB), not int8.** For Kokoro on ARM,
-quantization buys smaller storage but *loses* speed. (Opposite of Supertonic,
-where int8 is the deployment standard.)
+**Conclusion: use the fp32 bundle, not int8.** For Kokoro on ARM, quantization
+buys smaller storage but *loses* speed. (Opposite of Supertonic, where int8 is
+the deployment standard.) Rustle pins the v1.0 sherpa-onnx pack and downloads
+`model.onnx`, `voices.bin`, `tokens.txt`, and `lexicon-us-en.txt` (359,719,088
+bytes total, about 343 MiB); this is larger than the earlier ~334 MB estimate
+because the runtime pack includes the English lexicon.
 
 ---
 
@@ -132,7 +135,11 @@ Supertonic replacement across the 31-language catalog.
 
 ## 5. Long-form audiobook behavior
 
-- Hard cap: **510 phonemes per pass**; longer input must be split.
+- Hard cap: **510 phonemes per pass**; longer input must be split. The pinned
+  sherpa-onnx Android `OfflineTts` API does not expose a phoneme-count or
+  phonemization preflight method, so Rustle uses sentence/clause-first chunks
+  with a conservative character bound. This reduces risk but is not a formal
+  guarantee for unusually phoneme-dense or out-of-vocabulary text.
 - Truncation is not benign: *"when truncation happens, the audio also gets
   corrupted. So my strategy … has been to avoid truncation at all costs"*
   (hexgrad/kokoro issue #200).
@@ -178,8 +185,10 @@ Apache-compatible. This is a breaking change (v2.0):
 | `kokoro-multi-lang-v1_1` (= v1.1-zh, zh-focused — not for us) | 348.0 MB |
 | legacy EN `v0_19` | 98.5 MB int8 / 304.8 MB fp32 |
 
-The 334 MB fp32 bundle fits comfortably next to Supertonic (~138 MB):
-**roughly half a GB for the engine pair**.
+The source bundle table above lists 333.7 MB, but Rustle's pinned runtime pack
+also includes the English lexicon required by sherpa-onnx v2.0.1. The four
+downloaded files total 359,719,088 bytes (about 343 MiB); alongside Supertonic
+the on-device model files occupy roughly half a GB.
 
 ### 6.3 License sheet if we ship Kokoro
 
@@ -204,22 +213,31 @@ The 334 MB fp32 bundle fits comfortably next to Supertonic (~138 MB):
 
 ---
 
-## 8. Conclusion and pilot checklist
+## 8. Conclusion and implementation status
 
-1. Best-in-class EN narrator engine, proven flagship-ARM realtime,
-   334 MB fp32, Apache-2.0 clean, no cloning surface.
-2. Not a catalog replacement — add for EN (+ optional fr/it/pt experiments),
-   keep Supertonic everywhere else. Engine selection is per language.
-3. De-risk in this order:
-   a. **G2P under sherpa ≥ 2.0**: confirm whether sherpa distributes a
-      Kokoro `lexicon.txt` for v2.0; test OOV fiction names through it; if
-      weak, decide between a misaki port and server-side pre-phonemization
-      stored in the prepared-book format.
-   b. fp32-on-ARM RTF/RAM verification on our 3 device tiers (fp32 first;
-      int8 only as a control).
-   c. Chunker tuning to the 100–200-token goldilocks window (merge/split
-      policy in `BookReprepper`), ensuring the 510 cap can never truncate.
-   d. Expression-markup policy for EN chapters (strip vs map).
+Kokoro is implemented as an optional English engine; Supertonic remains the
+default and continues to handle every non-English language. The engine is a
+global preference, with per-language fallback rather than a replacement for
+the existing language catalog.
+
+Rustle pins `csukuangfj/kokoro-multi-lang-v1_0` at
+`f7b96bb6bef5c5da4d3aa4f4e0498fbbf62dc78b` and downloads only
+`model.onnx`, `voices.bin`, `tokens.txt`, and `lexicon-us-en.txt`. It uses the
+sherpa-onnx 2.0.1 lexicon route without downloading espeak-ng data. Output is
+kept in an engine-specific cache and compressed at Kokoro's 24 kHz sample
+rate. Kokoro uses sentence/clause-first chunks capped at 160 characters, with
+words preserved at chunk boundaries. This is a conservative proxy for the
+phoneme cap, not an exact phoneme-count guarantee; oversized single tokens
+surface an error instead of being silently split or dropped. A Kokoro cache
+version is included in WAV names and compressed indexes so output made with
+the previous chunker is regenerated. Supertonic text preparation and cache
+identity remain unchanged.
+
+Before release, validate Kokoro synthesis and lexicon/OOV pronunciation on
+physical Android devices, and measure latency and memory use alongside the
+existing Supertonic path. The unit suite covers engine selection, cache
+isolation, chunking boundaries, and sample-rate forwarding; it cannot replace
+those device and pronunciation checks.
    e. Voice audit: pick 1 female + 1 male narrator + dialog set from the
       graded EN shortlist; check consistency across a 60-min render.
    f. ExecuTorch/ONNX GPU path (NNAPI/QNN or OpenCL) as a stretch speedup.

@@ -107,9 +107,12 @@ class PlaybackService : MediaLibraryService() {
       segments: List<Segment>,
       voice: String,
       dialogueVoice: String?,
-      language: String
+      language: String,
+      engine: com.chint.audiobook.data.model.TtsEngine
     ) {
-      synthesisService?.startSynthesis(bookDir, bookSlug, chapterIndex, segments, voice, dialogueVoice, language)
+      synthesisService?.startSynthesis(
+        bookDir, bookSlug, chapterIndex, segments, voice, dialogueVoice, language, engine
+      )
     }
 
     override fun cancelSynthesis() {
@@ -123,9 +126,12 @@ class PlaybackService : MediaLibraryService() {
       segments: List<Segment>,
       voice: String,
       dialogueVoice: String?,
-      language: String
+      language: String,
+      engine: com.chint.audiobook.data.model.TtsEngine
     ) {
-      synthesisService?.startPreloadSynthesis(bookDir, bookSlug, chapterIndex, segments, voice, dialogueVoice, language)
+      synthesisService?.startPreloadSynthesis(
+        bookDir, bookSlug, chapterIndex, segments, voice, dialogueVoice, language, engine
+      )
     }
 
     override fun cancelPreload() {

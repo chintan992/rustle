@@ -13,6 +13,9 @@ data class SegmentIndexEntry(
 data class ChapterIndex(
   val chapterIndex: Int,
   val totalDurationMs: Long,
-  val segments: List<SegmentIndexEntry>
+  val segments: List<SegmentIndexEntry>,
+  val engine: TtsEngine? = null,
+  val narrationVoice: String? = null,
+  val dialogueVoice: String? = null,
+  val engineVersion: String? = null
 )
-

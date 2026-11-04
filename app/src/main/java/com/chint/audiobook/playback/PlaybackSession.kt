@@ -7,6 +7,7 @@ import com.chint.audiobook.data.model.ChapterRef
 import com.chint.audiobook.data.model.PlaybackPosition
 import com.chint.audiobook.data.model.PlaybackState
 import com.chint.audiobook.data.model.Segment
+import com.chint.audiobook.data.model.TtsEngine
 import com.chint.audiobook.data.repository.BookmarksRepository
 import com.chint.audiobook.data.repository.BookPrefsRepository
 import com.chint.audiobook.data.repository.LibraryRepository
@@ -17,6 +18,8 @@ import com.chint.audiobook.engine.DeviceConditions
 import com.chint.audiobook.engine.ListeningStatsRepository
 import com.chint.audiobook.engine.PreloadPolicy
 import com.chint.audiobook.engine.SegmentVoices
+import com.chint.audiobook.engine.TtsEngineSelection
+import com.chint.audiobook.ui.onboarding.VoiceCatalog
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +54,8 @@ interface SynthesisGateway {
     segments: List<Segment>,
     voice: String,
     dialogueVoice: String? = null,
-    language: String = "en"
+    language: String = "en",
+    engine: TtsEngine = TtsEngine.SUPERTONIC
   )
 
   fun cancelSynthesis()
@@ -63,7 +67,8 @@ interface SynthesisGateway {
     segments: List<Segment>,
     voice: String,
     dialogueVoice: String? = null,
-    language: String = "en"
+    language: String = "en",
+    engine: TtsEngine = TtsEngine.SUPERTONIC
   )
 
   fun cancelPreload()
@@ -164,6 +169,7 @@ class PlaybackSession(
   /** Multi-voice: resolved dialogue voice for the active book (null = off). */
   @Volatile
   private var activeDialogueVoice: String? = null
+  private var activeEngine: TtsEngine = TtsEngine.SUPERTONIC
 
   private val _dialogueVoiceOverride = MutableStateFlow<String?>(null)
   val dialogueVoiceOverride: StateFlow<String?> = _dialogueVoiceOverride.asStateFlow()
@@ -325,15 +331,26 @@ class PlaybackSession(
       // WS3: per-book overrides follow the chapter load. Multi-voice: the
         // dialogue voice is book pref -> global setting (null = feature off).
         val bookPrefs = bookPrefsRepository.load(bookSlug)
-        _bookVoiceOverride.value = bookPrefs.voice
-        val globalDialogue = settingsRepository.appSettings.first().dialogueVoice
-        val dialogueVoice = bookPrefs.dialogueVoice ?: globalDialogue
-        _dialogueVoiceOverride.value = bookPrefs.dialogueVoice
+        val settingsSnapshot = settingsRepository.appSettings.first()
+        activeEngine = TtsEngineSelection.forLanguage(settingsSnapshot.ttsEngine, book.language)
+        _bookVoiceOverride.value = bookPrefs.voiceFor(activeEngine)
+        val globalDialogue = if (activeEngine == TtsEngine.KOKORO) {
+          settingsSnapshot.kokoroDialogueVoice
+        } else {
+          settingsSnapshot.dialogueVoice
+        }
+        val dialogueVoice = bookPrefs.dialogueVoiceFor(activeEngine)
+          ?.takeIf { VoiceCatalog.contains(activeEngine, it) }
+          ?: globalDialogue?.takeIf { VoiceCatalog.contains(activeEngine, it) }
+        _dialogueVoiceOverride.value = bookPrefs.dialogueVoiceFor(activeEngine)
         bookPrefs.speed?.let { playbackController.setSpeed(it) }
         // Round 10 (Task 1): the controller seeds only the contiguous cached anchor
         // prefix; mark exactly those anchors appended so the poll loop appends the
         // rest in canonical order (never a cached far-tail WAV behind a gap).
-        val seededSegments = playbackController.loadChapterSegments(bookDir, chapterIndex, segments, dialogueVoice)
+        val seededSegments = playbackController.loadChapterSegments(
+          bookDir, chapterIndex, segments, dialogueVoice,
+          activeEngine, resolveVoiceForEngine(bookPrefs.voiceFor(activeEngine), settingsSnapshot)
+        )
         for (segment in seededSegments) {
           appendTracker.markAppended(segment.hash)
         }
@@ -363,7 +380,6 @@ class PlaybackSession(
         // Cache/prep round (B1/B2): stamp access, then enforce the cache cap.
         // Keep window = current chapter through current + prepareAhead so the
         // eviction never deletes audio the user is about to hear.
-        val settingsSnapshot = settingsRepository.appSettings.first()
         audioCacheManager.stampAccess(bookDir, chapterIndex)
         val capBytes = settingsSnapshot.cacheCapGb * 1_000_000_000L
         if (capBytes > 0) {
@@ -686,12 +702,31 @@ class PlaybackSession(
   fun selectVoice(voice: String, applyToAllBooks: Boolean) {
     val book = _activeBook.value ?: return
     if (applyToAllBooks) {
-      scope.launch { settingsRepository.updateAppSettings { it.copy(defaultVoice = voice) } }
+      scope.launch {
+        settingsRepository.updateAppSettings {
+          val engine = TtsEngineSelection.forLanguage(it.ttsEngine, book.language)
+          if (engine == TtsEngine.KOKORO) it.copy(kokoroVoice = voice)
+          else it.copy(defaultVoice = voice)
+        }
+      }
       return
     }
     scope.launch {
-      bookPrefsRepository.save(book.slug, bookPrefsRepository.load(book.slug).copy(voice = voice))
+      val settings = settingsRepository.appSettings.first()
+      val engine = TtsEngineSelection.forLanguage(settings.ttsEngine, book.language)
+      if (_activeBook.value?.slug != book.slug) return@launch
+      val prefs = bookPrefsRepository.load(book.slug)
+      val updatedPrefs = if (engine == TtsEngine.KOKORO) {
+        prefs.copy(kokoroVoice = voice)
+      } else {
+        prefs.copy(voice = voice)
+      }
+      bookPrefsRepository.save(book.slug, updatedPrefs)
       _bookVoiceOverride.value = voice
+      if (engine != activeEngine) {
+        loadChapterInternal(book.slug, _currentChapterIndex.value, autoAdvance = false)
+        return@launch
+      }
       val segments = _chapterSegments.value
       if (segments.isEmpty() || voice == lastSynthesizedVoice) return@launch
       lastSynthesizedVoice = voice
@@ -701,7 +736,9 @@ class PlaybackSession(
         chapterIndex = _currentChapterIndex.value,
         segments = segments,
         voice = voice,
-        language = book.language
+        dialogueVoice = activeDialogueVoice,
+        language = book.language,
+        engine = engine
       )
     }
   }
@@ -716,8 +753,11 @@ class PlaybackSession(
       playbackController.pause()
       synthesis.cancelSynthesis()
       synthesis.cancelPreload()
-      val effectiveVoice = _bookVoiceOverride.value ?: resolveCurrentVoice()
-      val expressive = settingsRepository.appSettings.first().expressiveNarration
+      val settings = settingsRepository.appSettings.first()
+      val targetEngine = TtsEngineSelection.forLanguage(settings.ttsEngine, language)
+      val bookPrefs = bookPrefsRepository.load(book.slug)
+      val effectiveVoice = resolveVoiceForEngine(bookPrefs.voiceFor(targetEngine), settings, targetEngine)
+      val expressive = settings.expressiveNarration
       val reprep = com.chint.audiobook.pipeline.BookReprepper(context)
       reprep.reprepBook(book.slug, language, expressive, effectiveVoice)
       val reloadedBook = libraryRepository.getBookBySlug(book.slug)
@@ -738,13 +778,30 @@ class PlaybackSession(
     val book = _activeBook.value ?: return
     if (applyToAllBooks) {
       scope.launch {
-        settingsRepository.updateAppSettings { it.copy(dialogueVoice = voice) }
+        settingsRepository.updateAppSettings {
+          val engine = TtsEngineSelection.forLanguage(it.ttsEngine, book.language)
+          if (engine == TtsEngine.KOKORO) it.copy(kokoroDialogueVoice = voice)
+          else it.copy(dialogueVoice = voice)
+        }
       }
       return
     }
     scope.launch {
-      bookPrefsRepository.save(book.slug, bookPrefsRepository.load(book.slug).copy(dialogueVoice = voice))
+      val settings = settingsRepository.appSettings.first()
+      val engine = TtsEngineSelection.forLanguage(settings.ttsEngine, book.language)
+      if (_activeBook.value?.slug != book.slug) return@launch
+      val prefs = bookPrefsRepository.load(book.slug)
+      val updatedPrefs = if (engine == TtsEngine.KOKORO) {
+        prefs.copy(kokoroDialogueVoice = voice)
+      } else {
+        prefs.copy(dialogueVoice = voice)
+      }
+      bookPrefsRepository.save(book.slug, updatedPrefs)
       _dialogueVoiceOverride.value = voice
+      if (engine != activeEngine) {
+        loadChapterInternal(book.slug, _currentChapterIndex.value, autoAdvance = false)
+        return@launch
+      }
       activeDialogueVoice = voice
       val segments = _chapterSegments.value
       if (segments.isEmpty()) return@launch
@@ -756,7 +813,8 @@ class PlaybackSession(
         segments = segments,
         voice = lastSynthesizedVoice ?: resolveCurrentVoice(),
         dialogueVoice = voice,
-        language = book.language
+        language = book.language,
+        engine = engine
       )
     }
   }
@@ -774,10 +832,24 @@ class PlaybackSession(
 
   /** WS3: book-pref voice wins over the global default narrator. */
   private suspend fun resolveCurrentVoice(): String {
-    val slug = _activeBook.value?.slug
-      ?: return settingsRepository.appSettings.first().defaultVoice
-    return bookPrefsRepository.load(slug).voice
-      ?: settingsRepository.appSettings.first().defaultVoice
+    val settings = settingsRepository.appSettings.first()
+    val book = _activeBook.value
+    val engine = book?.let { TtsEngineSelection.forLanguage(settings.ttsEngine, it.language) }
+      ?: settings.ttsEngine
+    activeEngine = engine
+    val prefsVoice = book?.let { bookPrefsRepository.load(it.slug).voiceFor(engine) }
+    return resolveVoiceForEngine(prefsVoice, settings, engine)
+  }
+
+  private fun resolveVoiceForEngine(
+    bookVoice: String?,
+    settings: com.chint.audiobook.data.model.AppSettings,
+    engine: TtsEngine = activeEngine
+  ): String {
+    val globalVoice = if (engine == TtsEngine.KOKORO) settings.kokoroVoice else settings.defaultVoice
+    return bookVoice?.takeIf { VoiceCatalog.contains(engine, it) }
+      ?: globalVoice.takeIf { VoiceCatalog.contains(engine, it) }
+      ?: VoiceCatalog.defaultId(engine)
   }
 
   private suspend fun startActiveSynthesisSuspend() {
@@ -797,7 +869,8 @@ class PlaybackSession(
       segments = segments,
       voice = voice,
       dialogueVoice = activeDialogueVoice,
-      language = book.language
+      language = book.language,
+      engine = activeEngine
     )
   }
 
@@ -807,21 +880,36 @@ class PlaybackSession(
     // dialogue-voice change re-renders the chapter's dialogue segments).
     voiceRetargetJob = scope.launch {
       settingsRepository.appSettings
-        .map { Pair(it.defaultVoice, it.dialogueVoice) }
+        .map { it }
         .distinctUntilChanged()
-        .collectLatest { (voice, globalDialogue) ->
+        .collectLatest { settings ->
           val book = _activeBook.value ?: return@collectLatest
           val segments = _chapterSegments.value
           if (segments.isEmpty()) return@collectLatest
+          val engine = TtsEngineSelection.forLanguage(settings.ttsEngine, book.language)
           val bookPrefs = bookPrefsRepository.load(book.slug)
-          val dialogueVoice = bookPrefs.dialogueVoice ?: globalDialogue
+          val voice = resolveVoiceForEngine(bookPrefs.voiceFor(engine), settings, engine)
+          val globalDialogue = if (engine == TtsEngine.KOKORO) {
+            settings.kokoroDialogueVoice
+          } else {
+            settings.dialogueVoice
+          }
+          val dialogueVoice = bookPrefs.dialogueVoiceFor(engine)
+            ?.takeIf { VoiceCatalog.contains(engine, it) }
+            ?: globalDialogue?.takeIf { VoiceCatalog.contains(engine, it) }
+          if (engine != activeEngine) {
+            loadChapterInternal(book.slug, _currentChapterIndex.value, autoAdvance = false)
+            return@collectLatest
+          }
           val narrationUnchanged = voice == lastSynthesizedVoice
           val dialogueUnchanged = dialogueVoice == activeDialogueVoice
           if (narrationUnchanged && dialogueUnchanged) return@collectLatest
 
           lastSynthesizedVoice = voice
+          activeEngine = engine
           activeDialogueVoice = dialogueVoice
-          _dialogueVoiceOverride.value = bookPrefs.dialogueVoice
+          _bookVoiceOverride.value = bookPrefs.voiceFor(engine)
+          _dialogueVoiceOverride.value = bookPrefs.dialogueVoiceFor(engine)
           val bookDir = File(context.filesDir, "books/${book.slug}")
           synthesis.startSynthesis(
             bookDir = bookDir,
@@ -830,7 +918,8 @@ class PlaybackSession(
             segments = segments,
             voice = voice,
             dialogueVoice = dialogueVoice,
-            language = book.language
+            language = book.language,
+            engine = engine
           )
         }
     }
@@ -908,11 +997,14 @@ class PlaybackSession(
   /** First existing WAV for a segment hash — voice-aware (multi-voice contract). */
   private fun existingWavFile(bookSlug: String, chapterIndex: Int, hash: String): File? {
     val bookDir = File(context.filesDir, "books/$bookSlug")
-    val chapterAudioDir = File(bookDir, "audio/ch${"%04d".format(chapterIndex)}")
-    val globalCacheAudioDir = File(bookDir, "cache/audio")
+    val chapterAudioDir = SegmentVoices.chapterAudioDir(bookDir, chapterIndex, activeEngine)
+    val globalCacheAudioDir = SegmentVoices.globalCacheAudioDir(bookDir, activeEngine)
     val text = _chapterSegments.value.firstOrNull { it.hash == hash }?.text ?: ""
 
-    return SegmentVoices.findWav(chapterAudioDir, globalCacheAudioDir, hash, text, activeDialogueVoice)
+    return SegmentVoices.findWav(
+      chapterAudioDir, globalCacheAudioDir, hash, text, activeDialogueVoice,
+      activeEngine, lastSynthesizedVoice ?: VoiceCatalog.defaultId(activeEngine)
+    )
   }
 
   /**
@@ -938,14 +1030,21 @@ class PlaybackSession(
     }
 
     val bookDir = File(context.filesDir, "books/${book.slug}")
+    val narrationVoice = resolveCurrentVoice()
     var cursor = currentChapterIndex
     var ahead = 0
     while (ahead < settings.prepareAheadChapters) {
       val next = nextChapterOrNull(cursor, book.chapters) ?: break
       val chapterSegments = readSegmentsFile(book.slug, next)
       if (chapterSegments.isEmpty()) break
-      val nextAudioDir = File(bookDir, "audio/ch${"%04d".format(next)}")
-      val isCompressed = com.chint.audiobook.engine.AudioCompressor.isChapterCompressed(nextAudioDir)
+      val nextAudioDir = SegmentVoices.chapterAudioDir(bookDir, next, activeEngine)
+      val isCompressed = com.chint.audiobook.engine.AudioCompressor.isChapterCompressedFor(
+        nextAudioDir,
+        activeEngine,
+        narrationVoice,
+        activeDialogueVoice,
+        chapterSegments.distinctBy { it.hash }.map { it.hash }
+      )
       val hasMissing = !isCompressed && chapterSegments
         .distinctBy { it.hash }
         .any { existingWavFile(book.slug, next, it.hash) == null }
@@ -956,9 +1055,10 @@ class PlaybackSession(
           bookSlug = book.slug,
           chapterIndex = next,
           segments = chapterSegments,
-          voice = resolveCurrentVoice(),
+          voice = narrationVoice,
           dialogueVoice = activeDialogueVoice,
-          language = book.language
+          language = book.language,
+          engine = activeEngine
         )
         return
       }
@@ -1067,27 +1167,65 @@ class PlaybackSession(
     }.getOrDefault(emptyList())
   }
 
-  /** Cache/prep round (B3): chapters with at least one rendered WAV (sheet dots). */
-  private suspend fun refreshChaptersWithAudio(bookSlug: String) =
-    withContext(Dispatchers.IO) {
-      val audioRoot = File(
-        context.filesDir, "books/$bookSlug/audio"
-      )
-      val chapterDirs = audioRoot
-        .listFiles { f -> f.isDirectory }
-        ?.filter { dir -> dir.listFiles()?.any { it.isFile && it.length() > 0L } == true }
-        ?: emptyList()
-      _chaptersWithAudio.value = chapterDirs
+  /** Cache/prep round (B3): chapters with at least one current-engine audio file (sheet dots). */
+  private suspend fun refreshChaptersWithAudio(bookSlug: String) {
+    val engine = activeEngine
+    val narrationVoice = lastSynthesizedVoice ?: VoiceCatalog.defaultId(engine)
+    val dialogueVoice = activeDialogueVoice
+    val (chapterIndexes, durations) = withContext(Dispatchers.IO) {
+      val bookDir = File(context.filesDir, "books/$bookSlug")
+      val audioRoot = SegmentVoices.engineAudioDir(bookDir, engine)
+      val audioDirs = audioRoot.listFiles { f -> f.isDirectory }.orEmpty()
+      val expectedHashesByDir = audioDirs.associateWith { dir ->
+        if (com.chint.audiobook.engine.AudioCompressor.isChapterCompressed(dir)) {
+          val chapterIndex = dir.name.removePrefix("ch").toIntOrNull()
+          chapterIndex?.let { index ->
+            readSegmentsFile(bookSlug, index).distinctBy { it.hash }.map { it.hash }
+          }.orEmpty()
+        } else {
+          emptyList()
+        }
+      }
+      val chapterDirs = audioDirs.filter { dir ->
+        val expectedHashes = expectedHashesByDir.getValue(dir)
+        com.chint.audiobook.engine.AudioCompressor.isChapterCompressedFor(
+          dir,
+          engine,
+          narrationVoice,
+          dialogueVoice,
+          expectedHashes
+        ) ||
+          dir.listFiles()?.any { file ->
+            if (!file.isFile || file.length() <= 0L || !file.name.endsWith(".wav", ignoreCase = true)) {
+              false
+            } else if (engine == TtsEngine.KOKORO) {
+              file.name.endsWith("~kokoro-${SegmentVoices.KOKORO_CACHE_VERSION}-$narrationVoice.wav") ||
+                (dialogueVoice != null &&
+                  file.name.endsWith("~kokoro-${SegmentVoices.KOKORO_CACHE_VERSION}-$dialogueVoice.wav"))
+            } else {
+              !file.name.contains("~") ||
+                (dialogueVoice != null && file.name.endsWith("~$dialogueVoice.wav"))
+            }
+          } == true
+      }
+      val chapterIndexes = chapterDirs
         .mapNotNull { dir -> dir.name.removePrefix("ch").toIntOrNull() }
         .toSet()
-      // WS2: measured duration per cached chapter — a chapter "has audio" only
-      // when at least one WAV exists; partial caches are still a useful lower
-      // bound and the sheet labels estimates with ≈ when not fully cached.
-      // Bounded in practice by the cache cap; the walk reuses this same pass.
-      val dv = activeDialogueVoice
-      _chapterDurationsMs.value = chapterDirs.associate { dir ->
+      val durations = chapterDirs.associate { dir ->
         val index = dir.name.removePrefix("ch").toIntOrNull() ?: -1
-        val compressedIndex = com.chint.audiobook.engine.AudioCompressor.loadIndex(dir)
+        val compressedIndex =
+          if (com.chint.audiobook.engine.AudioCompressor.isChapterCompressedFor(
+              dir,
+              engine,
+              narrationVoice,
+              dialogueVoice,
+              expectedHashesByDir.getValue(dir)
+            )
+          ) {
+            com.chint.audiobook.engine.AudioCompressor.loadIndex(dir)
+          } else {
+            null
+          }
         val total = if (compressedIndex != null && compressedIndex.totalDurationMs > 0L) {
           compressedIndex.totalDurationMs
         } else {
@@ -1096,16 +1234,31 @@ class PlaybackSession(
           // current-dialogue files only.
           dir.listFiles()
             ?.filter { file ->
-              file.length() > 0L && (
+              if (file.length() <= 0L || !file.name.endsWith(".wav", ignoreCase = true)) {
+                false
+              } else if (engine == TtsEngine.KOKORO) {
+                file.name.endsWith("~kokoro-${SegmentVoices.KOKORO_CACHE_VERSION}-$narrationVoice.wav") ||
+                  (dialogueVoice != null &&
+                    file.name.endsWith("~kokoro-${SegmentVoices.KOKORO_CACHE_VERSION}-$dialogueVoice.wav"))
+              } else {
                 !file.name.contains("~") ||
-                  (dv != null && file.name.endsWith("~$dv.wav"))
-                )
+                  (dialogueVoice != null && file.name.endsWith("~$dialogueVoice.wav"))
+              }
             }
             ?.sumOf { WavDuration.durationMs(it) ?: 0L } ?: 0L
         }
         index to total
       }.filterKeys { it >= 0 }
+      chapterIndexes to durations
     }
+    if (activeEngine == engine &&
+      (lastSynthesizedVoice ?: VoiceCatalog.defaultId(activeEngine)) == narrationVoice &&
+      activeDialogueVoice == dialogueVoice
+    ) {
+      _chaptersWithAudio.value = chapterIndexes
+      _chapterDurationsMs.value = durations
+    }
+  }
 
   /**
    * N13: persist the voice/speed that are actually in play, not the

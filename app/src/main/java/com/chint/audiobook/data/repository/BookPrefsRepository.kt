@@ -1,6 +1,7 @@
 package com.chint.audiobook.data.repository
 
 import java.io.File
+import com.chint.audiobook.data.model.TtsEngine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -16,8 +17,16 @@ data class BookPrefs(
   val voice: String? = null,
   val speed: Float? = null,
   // Multi-voice: per-book dialogue voice override; null inherits the global.
-  val dialogueVoice: String? = null
-)
+  val dialogueVoice: String? = null,
+  val kokoroVoice: String? = null,
+  val kokoroDialogueVoice: String? = null
+) {
+  fun voiceFor(engine: TtsEngine): String? =
+    if (engine == TtsEngine.KOKORO) kokoroVoice else voice
+
+  fun dialogueVoiceFor(engine: TtsEngine): String? =
+    if (engine == TtsEngine.KOKORO) kokoroDialogueVoice else dialogueVoice
+}
 
 class BookPrefsRepository(private val booksDir: File) {
 

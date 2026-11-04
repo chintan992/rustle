@@ -15,7 +15,10 @@ import androidx.core.app.NotificationCompat
 import com.chint.audiobook.R
 import com.chint.audiobook.data.model.LedgerEvent
 import com.chint.audiobook.data.model.Segment
+import com.chint.audiobook.data.model.TtsEngine
 import com.chint.audiobook.data.repository.LedgerRepository
+import com.chint.audiobook.engine.KokoroModelManager
+import com.chint.audiobook.engine.KokoroTtsEngineManager
 import com.chint.audiobook.engine.ModelManager
 import com.chint.audiobook.engine.SegmentVoices
 import com.chint.audiobook.engine.TtsEngineManager
@@ -40,6 +43,8 @@ class AudiobookService : Service() {
   @Inject lateinit var ledgerRepository: LedgerRepository
   @Inject lateinit var ttsEngineManager: TtsEngineManager
   @Inject lateinit var modelManager: ModelManager
+  @Inject lateinit var kokoroTtsEngineManager: KokoroTtsEngineManager
+  @Inject lateinit var kokoroModelManager: KokoroModelManager
   private var synthesisJob: Job? = null
   // Cache/prep round (B3): separate slot for background chapter preparation.
   private var preloadJob: Job? = null
@@ -108,7 +113,8 @@ class AudiobookService : Service() {
     segments: List<Segment>,
     voice: String,
     dialogueVoice: String? = null,
-    language: String = "en"
+    language: String = "en",
+    engine: TtsEngine = TtsEngine.SUPERTONIC
   ) {
     // Round 9 (Task 4): marker for start-audio latency measurement (open book /
     // chapter tap -> synthesis start -> engine init -> first render_done).
@@ -129,10 +135,11 @@ class AudiobookService : Service() {
       )
       jobWakeLock.acquire(30 * 60 * 1000L /* 30 min */)
       try {
-        val modelDir = modelManager.getModelDir()
+        val selectedEngine = com.chint.audiobook.engine.TtsEngineSelection.forLanguage(engine, language)
+        val modelDir = modelDirFor(selectedEngine)
 
-        val chapterAudioDir = File(bookDir, "audio/ch${"%04d".format(chapterIndex)}")
-        val globalCacheAudioDir = File(bookDir, "cache/audio")
+        val chapterAudioDir = SegmentVoices.chapterAudioDir(bookDir, chapterIndex, selectedEngine)
+        val globalCacheAudioDir = SegmentVoices.globalCacheAudioDir(bookDir, selectedEngine)
 
         for (segment in segments) {
           // Round 8: segment-granular cancellation — a superseding startSynthesis
@@ -144,13 +151,17 @@ class AudiobookService : Service() {
           // when the WAV for its CLASSIFIED role + current voices exists.
           val segVoice = SegmentVoices.voiceFor(segment.text, voice, dialogueVoice)
           val existing = SegmentVoices.findWav(
-            chapterAudioDir, globalCacheAudioDir, segment.hash, segment.text, dialogueVoice
+            chapterAudioDir, globalCacheAudioDir, segment.hash, segment.text, dialogueVoice,
+            selectedEngine, voice
           )
           if (existing != null) {
             continue
           }
 
-          renderSegment(bookDir, bookSlug, chapterIndex, segment, segVoice, dialogueVoice, modelDir, language) {
+          renderSegment(
+            bookDir, bookSlug, chapterIndex, segment, segVoice, voice, dialogueVoice,
+            modelDir, language, selectedEngine
+          ) {
             "Rendering sentence ${segment.i}/${segments.size}"
           }
         }
@@ -214,9 +225,11 @@ class AudiobookService : Service() {
     chapterIndex: Int,
     segment: Segment,
     voice: String,
+    narrationVoice: String,
     dialogueVoice: String?,
     modelDir: File,
     language: String = "en",
+    engine: TtsEngine = TtsEngine.SUPERTONIC,
     notificationLabel: () -> String
   ) {
     if (!bookDir.exists()) {
@@ -237,7 +250,10 @@ class AudiobookService : Service() {
     )
 
     val startTime = System.currentTimeMillis()
-    val wavBytes = ttsEngineManager.generateAudioWav(segment.text, voice, modelDir, language)
+    val wavBytes = when (engine) {
+      TtsEngine.SUPERTONIC -> ttsEngineManager.generateAudioWav(segment.text, voice, modelDir, language)
+      TtsEngine.KOKORO -> kokoroTtsEngineManager.generateAudioWav(segment.text, voice, modelDir)
+    }
     val endTime = System.currentTimeMillis()
 
     // BG0: the engine call above is the long window — the delete most likely
@@ -247,15 +263,22 @@ class AudiobookService : Service() {
     }
 
     val wallDurationSec = (endTime - startTime) / 1000.0
-    val audioDurationSec = (wavBytes.size - 44).coerceAtLeast(0) / 88200.0
+    val sampleRate = if (engine == TtsEngine.KOKORO) {
+      KokoroTtsEngineManager.EXPECTED_SAMPLE_RATE
+    } else {
+      TtsEngineManager.EXPECTED_SAMPLE_RATE
+    }
+    val audioDurationSec = (wavBytes.size - 44).coerceAtLeast(0) / (sampleRate * 2.0)
     val rtf = if (audioDurationSec > 0) wallDurationSec / audioDurationSec else 0.0
 
     // Atomic write: audio/chNNNN/<name>.wav.tmp -> rename. Multi-voice: the
     // filename comes from SegmentVoices — dialogue segments embed their voice
     // (<hash>~<voice>.wav), narration keeps the original <hash>.wav contract.
     val isDialogue = SegmentVoices.isDialogue(segment.text)
-    val wavName = SegmentVoices.wavFileName(segment.hash, isDialogue, dialogueVoice)
-    val chapterAudioDir = File(bookDir, "audio/ch${"%04d".format(chapterIndex)}")
+    val wavName = SegmentVoices.wavFileName(
+      segment.hash, isDialogue, dialogueVoice, engine, narrationVoice
+    )
+    val chapterAudioDir = SegmentVoices.chapterAudioDir(bookDir, chapterIndex, engine)
     chapterAudioDir.mkdirs()
 
     val tmpFile = File(chapterAudioDir, "$wavName.tmp")
@@ -308,18 +331,23 @@ class AudiobookService : Service() {
     segments: List<Segment>,
     voice: String,
     dialogueVoice: String? = null,
-    language: String = "en"
+    language: String = "en",
+    engine: TtsEngine = TtsEngine.SUPERTONIC
   ) {
     promoteToForeground()
     preloadJob?.cancel()
     preloadJob = serviceScope.launch {
       try {
-        val modelDir = modelManager.getModelDir()
-        val chapterAudioDir = File(bookDir, "audio/ch${"%04d".format(chapterIndex)}")
-        val globalCacheAudioDir = File(bookDir, "cache/audio")
+        val selectedEngine = com.chint.audiobook.engine.TtsEngineSelection.forLanguage(engine, language)
+        val modelDir = modelDirFor(selectedEngine)
+        val chapterAudioDir = SegmentVoices.chapterAudioDir(bookDir, chapterIndex, selectedEngine)
+        val globalCacheAudioDir = SegmentVoices.globalCacheAudioDir(bookDir, selectedEngine)
         // Multi-voice: a segment is missing only when ITS voice's WAV is absent.
         val missing = segments.filter {
-          SegmentVoices.findWav(chapterAudioDir, globalCacheAudioDir, it.hash, it.text, dialogueVoice) == null
+          SegmentVoices.findWav(
+            chapterAudioDir, globalCacheAudioDir, it.hash, it.text, dialogueVoice,
+            selectedEngine, voice
+          ) == null
         }
         if (missing.isEmpty()) return@launch
         Log.i(TAG, "preloadStart book=$bookSlug chapter=$chapterIndex missing=${missing.size} lang=$language")
@@ -328,11 +356,15 @@ class AudiobookService : Service() {
           // Another path (voice re-target, earlier preload) may have written it
           // since the snapshot — voice-aware probe before spending the engine.
           val existing = SegmentVoices.findWav(
-            chapterAudioDir, globalCacheAudioDir, segment.hash, segment.text, dialogueVoice
+            chapterAudioDir, globalCacheAudioDir, segment.hash, segment.text, dialogueVoice,
+            selectedEngine, voice
           )
           if (existing != null) continue
           val segVoice = SegmentVoices.voiceFor(segment.text, voice, dialogueVoice)
-          renderSegment(bookDir, bookSlug, chapterIndex, segment, segVoice, dialogueVoice, modelDir, language) {
+          renderSegment(
+            bookDir, bookSlug, chapterIndex, segment, segVoice, voice, dialogueVoice,
+            modelDir, language, selectedEngine
+          ) {
             "Preparing ch${"%04d".format(chapterIndex)} (${missing.indexOf(segment) + 1}/${missing.size})"
           }
         }
@@ -341,7 +373,10 @@ class AudiobookService : Service() {
         val distinctSegments = segments.distinctBy { it.hash }
         val textByHash = distinctSegments.associate { it.hash to it.text }
         val durations = distinctSegments.associate { seg ->
-          val wav = SegmentVoices.findWav(chapterAudioDir, globalCacheAudioDir, seg.hash, seg.text, dialogueVoice)
+          val wav = SegmentVoices.findWav(
+            chapterAudioDir, globalCacheAudioDir, seg.hash, seg.text, dialogueVoice,
+            selectedEngine, voice
+          )
           seg.hash to (wav?.let { com.chint.audiobook.playback.WavDuration.durationMs(it) } ?: 0L)
         }
         val compressed = com.chint.audiobook.engine.AudioCompressor.compressChapter(
@@ -349,8 +384,19 @@ class AudiobookService : Service() {
           chapterIndex = chapterIndex,
           hashes = distinctSegments.map { it.hash },
           durationsByHash = durations,
+          sampleRate = if (selectedEngine == TtsEngine.KOKORO) {
+            KokoroTtsEngineManager.EXPECTED_SAMPLE_RATE
+          } else {
+            TtsEngineManager.EXPECTED_SAMPLE_RATE
+          },
+          engine = selectedEngine,
+          narrationVoice = voice,
+          dialogueVoice = dialogueVoice,
           wavResolver = { hash ->
-            SegmentVoices.findWav(chapterAudioDir, globalCacheAudioDir, hash, textByHash[hash] ?: "", dialogueVoice)
+            SegmentVoices.findWav(
+              chapterAudioDir, globalCacheAudioDir, hash, textByHash[hash] ?: "",
+              dialogueVoice, selectedEngine, voice
+            )
           }
         )
         Log.i(TAG, "compressChapter returned $compressed for ch${"%04d".format(chapterIndex)}")
@@ -366,6 +412,9 @@ class AudiobookService : Service() {
     }
     preloadJob?.invokeOnCompletion { demoteFromForeground() }
   }
+
+  private fun modelDirFor(engine: TtsEngine): File =
+    if (engine == TtsEngine.KOKORO) kokoroModelManager.getModelDir() else modelManager.getModelDir()
 
   /** Cache/prep round (B3): stop the in-flight preload (conditions lost / chapter changed). */
   fun cancelPreload() {

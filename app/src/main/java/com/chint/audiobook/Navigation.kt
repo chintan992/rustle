@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.chint.audiobook.data.model.TtsEngine
+import com.chint.audiobook.engine.TtsEngineSelection
 import com.chint.audiobook.ui.import.ImportScreen
 import com.chint.audiobook.ui.import.ImportViewModel
 import com.chint.audiobook.ui.library.BookProgress
@@ -195,9 +197,15 @@ fun MainNavigation() {
     entryProvider = entryProvider {
       entry<VoiceSetupKey> {
         VoiceSetupScreen(
+          engine = appSettings.ttsEngine,
           onComplete = { voice, highlight ->
             settingsViewModel.updateSettings {
-              it.copy(defaultVoice = voice, highlightEnabled = highlight, onboardingCompleted = true)
+              it.copy(
+                defaultVoice = if (it.ttsEngine == TtsEngine.SUPERTONIC) voice else it.defaultVoice,
+                kokoroVoice = if (it.ttsEngine == TtsEngine.KOKORO) voice else it.kokoroVoice,
+                highlightEnabled = highlight,
+                onboardingCompleted = true
+              )
             }
             navigator.finishOnboarding()
             maybeRequestNotificationPermission()
@@ -344,6 +352,10 @@ fun MainNavigation() {
         val chapterTitle = activeBook?.chapters
           ?.firstOrNull { it.index == currentChapterIndex }?.title
           ?: "Chapter $currentChapterIndex"
+        val selectedReaderEngine = TtsEngineSelection.forLanguage(
+          appSettings.ttsEngine,
+          activeBook?.language ?: "en"
+        )
 
         ReaderScreen(
           bookTitle = activeBook?.title ?: "Audiobook",
@@ -358,9 +370,22 @@ fun MainNavigation() {
           isPlaying = playerState.isPlaying,
           buffering = playerState.buffering,
           // WS3: effective narrator = book override when set.
-          voice = readerVoiceOverride ?: appSettings.defaultVoice,
+          ttsEngine = selectedReaderEngine,
+          voice = readerVoiceOverride?.takeIf {
+            com.chint.audiobook.ui.onboarding.VoiceCatalog.contains(selectedReaderEngine, it)
+          } ?: if (selectedReaderEngine == TtsEngine.KOKORO) {
+            appSettings.kokoroVoice
+          } else {
+            appSettings.defaultVoice
+          },
           // Multi-voice: dialogue voice (book override -> global) for the sheet.
-          currentDialogueVoice = readerDialogueVoice ?: appSettings.dialogueVoice,
+          currentDialogueVoice = readerDialogueVoice?.takeIf {
+            com.chint.audiobook.ui.onboarding.VoiceCatalog.contains(selectedReaderEngine, it)
+          } ?: if (selectedReaderEngine == TtsEngine.KOKORO) {
+            appSettings.kokoroDialogueVoice
+          } else {
+            appSettings.dialogueVoice
+          },
           currentLanguage = activeBook?.language ?: "en",
           onLanguageSelect = { code -> readerViewModel.changeBookLanguage(code) },
           onDialogueVoiceSelect = { voice, applyToAllBooks ->
@@ -390,7 +415,14 @@ fun MainNavigation() {
           // WS3: scoped voice pick — book pref (session) or global default.
           onVoiceSelect = { voice, applyToAllBooks ->
             if (applyToAllBooks) {
-              settingsViewModel.updateSettings { it.copy(defaultVoice = voice) }
+              val engine = TtsEngineSelection.forLanguage(
+                appSettings.ttsEngine,
+                activeBook?.language ?: "en"
+              )
+              settingsViewModel.updateSettings {
+                if (engine == TtsEngine.KOKORO) it.copy(kokoroVoice = voice)
+                else it.copy(defaultVoice = voice)
+              }
             }
             readerViewModel.selectVoice(voice, applyToAllBooks)
           },
@@ -445,8 +477,10 @@ fun MainNavigation() {
 
       entry<ModelManagerKey> {
         val downloadState by modelViewModel.downloadState.collectAsState()
+        val kokoroDownloadState by modelViewModel.kokoroDownloadState.collectAsState()
         val benchmarkResult by modelViewModel.benchmarkResult.collectAsState()
         val packIntegrity by modelViewModel.packIntegrity.collectAsState()
+        val kokoroPackIntegrity by modelViewModel.kokoroPackIntegrity.collectAsState()
         val rtfStats by modelViewModel.rtfStats.collectAsState()
         // Round 9 (Task 4): refresh while visible so background renders show up.
         LaunchedEffect(Unit) {
@@ -459,9 +493,13 @@ fun MainNavigation() {
           downloadState = downloadState,
           benchmarkResult = benchmarkResult,
           packIntegrity = packIntegrity,
+          kokoroDownloadState = kokoroDownloadState,
+          kokoroPackIntegrity = kokoroPackIntegrity,
           rtfStats = rtfStats,
           onDownloadClick = { modelViewModel.startDownload() },
           onClearModelData = { modelViewModel.clearModelData() },
+          onDownloadKokoroClick = { modelViewModel.startKokoroDownload() },
+          onClearKokoroModelData = { modelViewModel.clearKokoroModelData() },
           onRunBenchmarkClick = { modelViewModel.runBenchmark() },
           onBackClick = { navigator.goBack() }
         )

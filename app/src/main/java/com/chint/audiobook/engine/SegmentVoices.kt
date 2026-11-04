@@ -1,6 +1,7 @@
 package com.chint.audiobook.engine
 
 import java.io.File
+import com.chint.audiobook.data.model.TtsEngine
 
 /**
  * Multi-voice round: the single source of truth for per-segment voice
@@ -26,6 +27,8 @@ import java.io.File
  * the model loads once), so alternating voices per segment costs nothing.
  */
 object SegmentVoices {
+
+  const val KOKORO_CACHE_VERSION = "v2"
 
   /** A segment whose text is majority-quoted speech. */
   const val DIALOGUE = true
@@ -93,6 +96,35 @@ object SegmentVoices {
       "$hash.wav"
     }
 
+  fun wavFileName(
+    hash: String,
+    isDialogue: Boolean,
+    dialogueVoice: String?,
+    engine: TtsEngine,
+    narrationVoice: String
+  ): String {
+    if (engine == TtsEngine.SUPERTONIC) {
+      return wavFileName(hash, isDialogue, dialogueVoice)
+    }
+    val selectedVoice = if (isDialogue && multiVoiceEnabled(dialogueVoice)) {
+      dialogueVoice!!
+    } else {
+      narrationVoice
+    }
+    val safeVoice = selectedVoice.replace(Regex("[^A-Za-z0-9_-]"), "_")
+    return "$hash~kokoro-$KOKORO_CACHE_VERSION-$safeVoice.wav"
+  }
+
+  fun chapterAudioDir(bookDir: File, chapterIndex: Int, engine: TtsEngine): File {
+    return File(engineAudioDir(bookDir, engine), "ch${"%04d".format(chapterIndex)}")
+  }
+
+  fun engineAudioDir(bookDir: File, engine: TtsEngine): File =
+    File(bookDir, if (engine == TtsEngine.SUPERTONIC) "audio" else "audio-kokoro")
+
+  fun globalCacheAudioDir(bookDir: File, engine: TtsEngine): File =
+    File(bookDir, if (engine == TtsEngine.SUPERTONIC) "cache/audio" else "cache/audio-kokoro")
+
   /**
    * The one WAV resolver: chapter audio dir first, then the per-book shared
    * cache — with the correct filename for the segment's classified role.
@@ -102,10 +134,12 @@ object SegmentVoices {
     globalCacheAudioDir: File,
     hash: String,
     text: String,
-    dialogueVoice: String?
+    dialogueVoice: String?,
+    engine: TtsEngine = TtsEngine.SUPERTONIC,
+    narrationVoice: String = "F2"
   ): File? {
     val isDialogue = isDialogue(text)
-    val name = wavFileName(hash, isDialogue, dialogueVoice)
+    val name = wavFileName(hash, isDialogue, dialogueVoice, engine, narrationVoice)
     val chapterFile = File(chapterAudioDir, name)
     if (chapterFile.exists() && chapterFile.length() > 0L) return chapterFile
     val cacheFile = File(globalCacheAudioDir, name)

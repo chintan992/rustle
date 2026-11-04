@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.chint.audiobook.R
 import com.chint.audiobook.data.model.AppSettings
 import com.chint.audiobook.data.model.ThemeMode
+import com.chint.audiobook.data.model.TtsEngine
 import com.chint.audiobook.ui.reader.DisplaySheet
 
 @Composable
@@ -63,6 +64,11 @@ fun SettingsScreen(
   var showDisplaySheet by rememberSaveable { mutableStateOf(false) }
   // Multi-voice: dialogue-narrator picker dialog.
   var showDialoguePicker by rememberSaveable { mutableStateOf(false) }
+  val selectedDialogueVoice = if (settings.ttsEngine == TtsEngine.KOKORO) {
+    settings.kokoroDialogueVoice
+  } else {
+    settings.dialogueVoice
+  }
 
   Column(
     modifier = Modifier
@@ -91,9 +97,36 @@ fun SettingsScreen(
     Spacer(modifier = Modifier.height(20.dp))
 
     SectionCard {
+      Text("Speech engine", style = MaterialTheme.typography.titleMedium)
+      SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        TtsEngine.entries.forEachIndexed { index, engine ->
+          SegmentedButton(
+            selected = settings.ttsEngine == engine,
+            onClick = { onUpdateSettings { it.copy(ttsEngine = engine) } },
+            shape = SegmentedButtonDefaults.itemShape(index = index, count = TtsEngine.entries.size)
+          ) {
+            Text(if (engine == TtsEngine.SUPERTONIC) "Supertonic" else "Kokoro")
+          }
+        }
+      }
+      Text(
+        if (settings.ttsEngine == TtsEngine.KOKORO) {
+          "Kokoro is English-focused. Other languages continue to use Supertonic. " +
+            "Download its model in Model Manager before playback."
+        } else {
+          "Supertonic remains the default and supports the full language catalog."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
       SettingRow(
         title = stringResource(R.string.settings_default_narrator),
-        supporting = stringResource(R.string.settings_current_voice, com.chint.audiobook.ui.onboarding.VoiceCatalog.displayName(settings.defaultVoice)),
+        supporting = stringResource(
+          R.string.settings_current_voice,
+          com.chint.audiobook.ui.onboarding.VoiceCatalog.displayName(
+            if (settings.ttsEngine == TtsEngine.KOKORO) settings.kokoroVoice else settings.defaultVoice
+          )
+        ),
         control = {
           OutlinedButton(onClick = onOpenVoiceSetup) {
             Text(stringResource(R.string.common_change))
@@ -235,25 +268,39 @@ fun SettingsScreen(
       SwitchSettingRow(
         title = stringResource(R.string.settings_separate_dialogue_voice),
         supporting = stringResource(R.string.settings_separate_dialogue_desc),
-        checked = settings.dialogueVoice != null,
+        checked = if (settings.ttsEngine == TtsEngine.KOKORO) {
+          settings.kokoroDialogueVoice != null
+        } else {
+          settings.dialogueVoice != null
+        },
         onCheckedChange = { enabled: Boolean ->
-          onUpdateSettings { it.copy(dialogueVoice = if (enabled) "M3" else null) }
+          onUpdateSettings {
+            if (settings.ttsEngine == TtsEngine.KOKORO) {
+              it.copy(kokoroDialogueVoice = if (enabled) "am_fenrir" else null)
+            } else {
+              it.copy(dialogueVoice = if (enabled) "M3" else null)
+            }
+          }
         },
         modifier = Modifier.semantics { contentDescription = "Separate dialogue voice" }
       )
       SwitchSettingRow(
         title = stringResource(R.string.settings_expressive_narration),
-        supporting = stringResource(R.string.settings_expressive_desc),
+        supporting = stringResource(R.string.settings_expressive_desc) +
+          if (settings.ttsEngine == TtsEngine.KOKORO) " Kokoro does not support acting tags." else "",
         checked = settings.expressiveNarration,
         onCheckedChange = { enabled: Boolean ->
           onUpdateSettings { it.copy(expressiveNarration = enabled) }
         },
         modifier = Modifier.semantics { contentDescription = "Expressive narration" }
       )
-      if (settings.dialogueVoice != null) {
+      if (selectedDialogueVoice != null) {
         SettingRow(
           title = stringResource(R.string.settings_dialogue_narrator),
-          supporting = stringResource(R.string.settings_current_voice, com.chint.audiobook.ui.onboarding.VoiceCatalog.displayName(settings.dialogueVoice)),
+          supporting = stringResource(
+            R.string.settings_current_voice,
+            com.chint.audiobook.ui.onboarding.VoiceCatalog.displayName(selectedDialogueVoice)
+          ),
           control = {
             OutlinedButton(onClick = { showDialoguePicker = true }) {
               Text(stringResource(R.string.common_change))
@@ -424,16 +471,22 @@ fun SettingsScreen(
       title = { Text("Dialogue narrator") },
       text = {
         Column {
-          com.chint.audiobook.ui.onboarding.VoiceCatalog.presets.forEach { preset ->
+          com.chint.audiobook.ui.onboarding.VoiceCatalog.presetsFor(settings.ttsEngine).forEach { preset ->
             TextButton(
               onClick = {
-                onUpdateSettings { it.copy(dialogueVoice = preset.id) }
+                onUpdateSettings {
+                  if (settings.ttsEngine == TtsEngine.KOKORO) {
+                    it.copy(kokoroDialogueVoice = preset.id)
+                  } else {
+                    it.copy(dialogueVoice = preset.id)
+                  }
+                }
                 showDialoguePicker = false
               }
             ) {
               Text(
                 "${preset.name} — ${preset.description}" +
-                  if (settings.dialogueVoice == preset.id) "  ✓" else ""
+                  if (selectedDialogueVoice == preset.id) "  ✓" else ""
               )
             }
           }

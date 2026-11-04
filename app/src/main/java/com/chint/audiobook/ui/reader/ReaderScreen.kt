@@ -88,6 +88,7 @@ import com.chint.audiobook.data.model.ChapterRef
 import com.chint.audiobook.data.model.ReaderFontFamily
 import com.chint.audiobook.data.model.ReaderLineSpacing
 import com.chint.audiobook.data.model.Segment
+import com.chint.audiobook.data.model.TtsEngine
 import com.chint.audiobook.playback.PlaybackSession
 import com.chint.audiobook.theme.AppArrowDown
 import com.chint.audiobook.theme.AppArrowUp
@@ -114,6 +115,7 @@ fun ReaderScreen(
   isPlaying: Boolean,
   buffering: Boolean,
   voice: String,
+  ttsEngine: TtsEngine = TtsEngine.SUPERTONIC,
   speed: Float,
   highlightEnabled: Boolean,
   // UI Round 4 (R5): reader display preferences + settings-sheet wiring.
@@ -780,6 +782,7 @@ fun ReaderScreen(
   if (showVoiceSheet) {
     VoiceSheet(
       currentVoice = voice,
+      ttsEngine = ttsEngine,
       currentDialogueVoice = currentDialogueVoice,
       onDialogueVoiceSelect = onDialogueVoiceSelect,
       onVoiceSelect = onVoiceSelect,
