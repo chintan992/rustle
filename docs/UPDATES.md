@@ -22,12 +22,12 @@ The repository's release signing configuration is optional for local/CI
 builds. Before publishing, verify that the release APKs are signed with the
 intended key and are not debuggable.
 
-## Build and name APKs
+## Build GitHub APKs
 
 Set the new `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 
 ```powershell
-.\gradlew.bat :app:assembleRelease
+.\gradlew.bat :app:assembleGithubRelease
 ```
 
 ABI splits are configured for `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64`.
@@ -38,8 +38,9 @@ Rustle-<abi>-<versionName>.apk
 ```
 
 For version `1.0.1`, examples are `Rustle-arm64-v8a-1.0.1.apk` and
-`Rustle-x86_64-1.0.1.apk`. Upload only APKs for ABIs for which the release
-actually contains compatible native libraries.
+`Rustle-x86_64-1.0.1.apk`. Upload only APKs for ABIs for which the release actually contains compatible
+native libraries. The flavor-specific APKs are in
+`app/build/outputs/apk/github/release/`.
 
 ## Update manifest
 
@@ -69,22 +70,23 @@ all referenced APKs to the same GitHub Release.
 
 ## Play Store distribution
 
-Build the Play upload artifact as an Android App Bundle (AAB):
+Build the Play flavor, which excludes `REQUEST_INSTALL_PACKAGES`, the
+GitHub-updater FileProvider, and GitHub update UI:
 
 ```powershell
-.\gradlew.bat :app:bundleRelease
+.\gradlew.bat :app:bundlePlayRelease
 ```
 
 The bundle is written to
-`app/build/outputs/bundle/release/app-release.aab`. Verify that it is signed
-with the intended upload key before submitting it in Play Console. Keep the
-upload key consistent; Play App Signing manages the distribution signing key.
-Use Play's internal or closed testing track before production rollout.
+`app/build/outputs/bundle/playRelease/app-play-release.aab`. Verify that
+the merged Play manifest does not declare `REQUEST_INSTALL_PACKAGES` and that
+the bundle is signed with the intended upload key before submitting it in Play
+Console. Keep the upload key consistent; Play App Signing manages the
+distribution signing key. Use Play's internal or closed testing track before
+production rollout.
 
-The GitHub updater and Play Store are separate distribution channels. Route
-Play-installed builds to the Play Store update flow rather than downloading a
-GitHub APK. A build installed from GitHub can only be updated in place by a
-Play build if the signing certificates are compatible; otherwise users must
-remain on the GitHub channel or follow a separately designed migration path.
-Check Google Play's installer/signing policies before enabling GitHub APK
-installation in a Play-distributed variant.
+The GitHub and Play flavors have the same application ID but different update
+channels. GitHub builds can install signed APK updates from GitHub Releases.
+Play builds update through Google Play and do not request package-install
+permission. Do not mix the channels unless their signing certificates are
+compatible and the user deliberately migrates.

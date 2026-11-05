@@ -39,9 +39,21 @@ android {
         applicationId = "dev.chintan992.rustle"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.2.0"
+        versionCode = 5
+        versionName = "1.2.1"
 
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+      create("github") {
+        dimension = "distribution"
+        buildConfigField("boolean", "GITHUB_UPDATES_ENABLED", "true")
+      }
+      create("play") {
+        dimension = "distribution"
+        buildConfigField("boolean", "GITHUB_UPDATES_ENABLED", "false")
+      }
     }
 
     signingConfigs {

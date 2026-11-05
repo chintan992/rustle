@@ -108,16 +108,18 @@ Run the local unit tests with:
 ```
 
 Debug APKs are written to `app/build/outputs/apk/debug/`. To build release
-APKs, configure the local signing properties described in
-[docs/UPDATES.md](docs/UPDATES.md), then run:
+artifacts, configure the local signing properties described in
+[docs/UPDATES.md](docs/UPDATES.md). Build GitHub APKs with:
 
 ```powershell
-.\gradlew.bat :app:assembleRelease
+.\gradlew.bat :app:assembleGithubRelease
 ```
 
-Never publish an unsigned release build or replace the release signing key.
-Android uses the signing certificate to determine whether an installed app
-can be updated in place.
+Build the Play Store App Bundle with `.\gradlew.bat :app:bundlePlayRelease`.
+Only the Play flavor omits the GitHub updater and the
+`REQUEST_INSTALL_PACKAGES` permission. Never publish an unsigned release build
+or replace the release signing key. Android uses the signing certificate to
+determine whether an installed app can be updated in place.
 
 ## Project structure
 

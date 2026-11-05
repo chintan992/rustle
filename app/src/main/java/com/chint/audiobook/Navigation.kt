@@ -124,6 +124,8 @@ fun MainNavigation() {
 
   val localContext = androidx.compose.ui.platform.LocalContext.current
 
+  val githubUpdatesEnabled = BuildConfig.GITHUB_UPDATES_ENABLED
+
   fun subscribeToAnnouncements() {
     AnnouncementNotifications.subscribe().addOnCompleteListener { result ->
       settingsViewModel.updateSettings {
@@ -176,7 +178,9 @@ fun MainNavigation() {
   val lifecycleOwner = LocalLifecycleOwner.current
   DisposableEffect(lifecycleOwner, updateViewModel) {
     val observer = LifecycleEventObserver { _, event ->
-      if (event == Lifecycle.Event.ON_RESUME) updateViewModel.onResume()
+      if (githubUpdatesEnabled && event == Lifecycle.Event.ON_RESUME) {
+        updateViewModel.onResume()
+      }
     }
     lifecycleOwner.lifecycle.addObserver(observer)
     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -187,9 +191,9 @@ fun MainNavigation() {
     !appSettings.batteryGuidanceDismissed
 
   LaunchedEffect(appSettings.onboardingCompleted, appSettings.onboardingModelReady) {
-    if (appSettings.onboardingCompleted) {
+    if (appSettings.onboardingCompleted && githubUpdatesEnabled) {
       updateViewModel.checkForUpdate()
-    } else {
+    } else if (!appSettings.onboardingCompleted) {
       val onboardingRoute = onboardingStartRoute(
         onboardingCompleted = false,
         onboardingModelReady = appSettings.onboardingModelReady
@@ -610,7 +614,8 @@ fun MainNavigation() {
           onUpdateSettings = { transform -> settingsViewModel.updateSettings(transform) },
           onOpenVoiceSetup = { navigator.navigate(VoiceSetupKey) },
           onOpenLicenses = { navigator.navigate(LicensesKey) },
-          onCheckUpdates = { updateViewModel.checkForUpdate(manual = true) },
+          showUpdateSettings = githubUpdatesEnabled,
+          onCheckUpdates = { if (githubUpdatesEnabled) updateViewModel.checkForUpdate(manual = true) },
           onBackClick = { navigator.goBack() }
         )
       }
@@ -637,12 +642,14 @@ fun MainNavigation() {
     },
     modifier = Modifier.align(Alignment.BottomCenter)
   )
-  UpdatePrompt(
-    state = updateUiState,
-    onDismiss = { updateViewModel.dismiss() },
-    onDownload = { release -> updateViewModel.downloadAndInstall(release) },
-    onOpenInstallSettings = { updateViewModel.openInstallPermissionSettings() }
-  )
+  if (githubUpdatesEnabled) {
+    UpdatePrompt(
+      state = updateUiState,
+      onDismiss = { updateViewModel.dismiss() },
+      onDownload = { release -> updateViewModel.downloadAndInstall(release) },
+      onOpenInstallSettings = { updateViewModel.openInstallPermissionSettings() }
+    )
+  }
   }
 }
 
