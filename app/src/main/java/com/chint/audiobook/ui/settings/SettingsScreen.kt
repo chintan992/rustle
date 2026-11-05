@@ -66,6 +66,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+private const val PRIVACY_POLICY_URL =
+  "https://chintan992.github.io/rustle/privacy-policy/"
+
 @Composable
 fun SettingsScreen(
   settings: AppSettings,
@@ -493,6 +496,24 @@ fun SettingsScreen(
         supporting = stringResource(R.string.settings_licenses_supporting),
         control = {
           OutlinedButton(onClick = onOpenLicenses) {
+            Text(stringResource(R.string.settings_view))
+          }
+        }
+      )
+      SettingRow(
+        title = stringResource(R.string.settings_privacy_policy),
+        supporting = stringResource(R.string.settings_privacy_policy_supporting),
+        control = {
+          OutlinedButton(
+            onClick = {
+              context.startActivity(
+                android.content.Intent(
+                  android.content.Intent.ACTION_VIEW,
+                  android.net.Uri.parse(PRIVACY_POLICY_URL)
+                )
+              )
+            }
+          ) {
             Text(stringResource(R.string.settings_view))
           }
         }

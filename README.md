@@ -137,8 +137,8 @@ used to download model packs and check for app updates. Rustle also uses
 Firebase Analytics and Crashlytics for app interaction analytics and crash
 diagnostics. Announcement notifications use Firebase Cloud Messaging (FCM);
 new installs are prompted after voice setup to enable them.
-See the in-app **Licenses & AI Disclosure** screen for the disclosures and
-details about data use.
+See the [Privacy Policy](https://chintan992.github.io/rustle/privacy-policy/)
+and the in-app **Licenses & AI Disclosure** screen for details about data use.
 
 ### Sending announcements
 

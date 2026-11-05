@@ -47,8 +47,12 @@ with no alpha channel to satisfy Play listing image constraints.
 
 - Upload `app/build/outputs/bundle/release/app-release.aab` to an internal or
   closed testing track.
-- Add the app's public privacy-policy URL and complete the Data safety,
+- Add `https://chintan992.github.io/rustle/privacy-policy/` as the app's public
+  privacy-policy URL and complete the Data safety,
   content-rating, target-audience, and app-access declarations in Play Console.
+- The policy-link app update is version 1.1.1 (versionCode 3); upload its
+  signed AAB rather than the earlier 1.1.0 bundle to satisfy the in-app link
+  requirement.
 - Verify the actual Firebase SDK data practices and disclosures against the
   current Data safety questionnaire before submitting.
 - Confirm the Play upload key and Play App Signing configuration in the

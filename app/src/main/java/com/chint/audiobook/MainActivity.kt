@@ -30,8 +30,8 @@ class MainActivity : ComponentActivity() {
     // Beta round WS2/WS4: lazy FirebaseAnalytics wrapper
     com.chint.audiobook.core.Telemetry.init(this)
 
-    // A2: anonymous usage telemetry — Firebase auto-collects lifecycle
-    // events; app_open marks cold starts. No user properties, no PII.
+    // A2: Firebase auto-collects lifecycle events; app_open marks cold starts.
+    // No user properties or book content are attached.
     com.google.firebase.analytics.FirebaseAnalytics.getInstance(this)
       .logEvent(com.google.firebase.analytics.FirebaseAnalytics.Event.APP_OPEN, android.os.Bundle())
 

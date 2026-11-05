@@ -92,13 +92,13 @@ fun LicensesScreen(onBackClick: () -> Unit) {
     Section(
       title = "Data & telemetry",
       body = listOf(
-        "Rustle collects anonymous usage and crash reports through Google " +
-          "Analytics for Firebase: app interactions, device identifiers and " +
-          "crash traces, used only to improve stability. Collected, not " +
-          "shared, never linked to your books — no book text or audio is " +
-          "ever collected or uploaded.",
-        "This collection is required for the Play listing's Data Safety " +
-          "declaration and is covered by Google's privacy policy."
+        "Rustle collects usage and crash reports through Google " +
+          "Analytics for Firebase and Firebase Crashlytics. These services " +
+          "may collect app interactions, app/device identifiers and crash " +
+          "diagnostics. Google processes this information to provide the " +
+          "services; Rustle does not send book text, file names or audio.",
+        "See the Privacy Policy in Settings for details about Firebase, " +
+          "optional announcements, model/update downloads, and your choices."
       )
     )
     Section(
