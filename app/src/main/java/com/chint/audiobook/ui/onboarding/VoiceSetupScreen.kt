@@ -65,6 +65,8 @@ import java.io.File
 @Composable
 fun VoiceSetupScreen(
   engine: TtsEngine = TtsEngine.SUPERTONIC,
+  isOnboarding: Boolean = false,
+  onPreviewVoice: (suspend (text: String, voice: String) -> ByteArray)? = null,
   onComplete: (selectedVoice: String, highlightEnabled: Boolean) -> Unit,
   onSkip: () -> Unit
 ) {
@@ -117,6 +119,14 @@ fun VoiceSetupScreen(
           style = MaterialTheme.typography.headlineMedium
         )
       }
+    }
+    if (isOnboarding) {
+      Spacer(modifier = Modifier.height(6.dp))
+      Text(
+        "Step 3 of 3 · Choose your default narrator.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
     }
     Spacer(modifier = Modifier.height(6.dp))
     Text(
@@ -179,11 +189,12 @@ fun VoiceSetupScreen(
                     // OfflineTts init + generate are CPU-heavy native calls:
                     // never run them on the UI thread.
                     val previewFile = withContext(Dispatchers.IO) {
-                      val wavBytes = if (engine == TtsEngine.KOKORO) {
-                        kokoroEngineManager.generateAudioWav(previewSampleText, id, modelDir)
-                      } else {
-                        engineManager.generateAudioWav(previewSampleText, id, modelDir)
-                      }
+                      val wavBytes = onPreviewVoice?.invoke(previewSampleText, id)
+                        ?: if (engine == TtsEngine.KOKORO) {
+                          kokoroEngineManager.generateAudioWav(previewSampleText, id, modelDir)
+                        } else {
+                          engineManager.generateAudioWav(previewSampleText, id, modelDir)
+                        }
                       val file = File(context.cacheDir, "voice_preview_${engine.name}_$id.wav")
                       file.writeBytes(wavBytes)
                       file
@@ -240,13 +251,15 @@ fun VoiceSetupScreen(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-      TextButton(
-        onClick = onSkip,
-        modifier = Modifier
-          .weight(1f)
-          .semantics { contentDescription = "Skip onboarding" }
-      ) {
-        Text(stringResource(R.string.onboarding_skip))
+      if (!isOnboarding) {
+        TextButton(
+          onClick = onSkip,
+          modifier = Modifier
+            .weight(1f)
+            .semantics { contentDescription = "Skip onboarding" }
+        ) {
+          Text(stringResource(R.string.onboarding_skip))
+        }
       }
       Button(
         onClick = { onComplete(selectedVoice, highlightEnabled) },

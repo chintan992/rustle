@@ -42,7 +42,7 @@ class Navigator(val state: NavigationState) {
 
   /**
    * Finish the onboarding flow.
-   * If the app started on [VoiceSetupKey], replace the root with [LibraryKey].
+   * If [VoiceSetupKey] is the root destination, replace it with [LibraryKey].
    * If [VoiceSetupKey] was opened as a sub-destination (e.g. from Settings),
    * pop it back to the caller instead of wiping the backstack.
    */
@@ -66,4 +66,3 @@ class Navigator(val state: NavigationState) {
     navigate(ReaderKey(bookSlug = bookSlug, chapterIndex = chapterIndex))
   }
 }
-

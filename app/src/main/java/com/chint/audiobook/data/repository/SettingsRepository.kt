@@ -35,6 +35,7 @@ class SettingsRepository @Inject constructor(
     val WIFI_ONLY_DOWNLOADS = booleanPreferencesKey("wifi_only_downloads")
     val BATTERY_SAVER_ENABLED = booleanPreferencesKey("battery_saver_enabled")
     val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+    val ONBOARDING_MODEL_READY = booleanPreferencesKey("onboarding_model_ready")
     val THEME_MODE = stringPreferencesKey("theme_mode")
 
     // UI Round 4 (R5): reader display preferences.
@@ -77,6 +78,7 @@ class SettingsRepository @Inject constructor(
       wifiOnlyDownloads = prefs[Keys.WIFI_ONLY_DOWNLOADS] ?: true,
       batterySaverEnabled = prefs[Keys.BATTERY_SAVER_ENABLED] ?: false,
       onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+      onboardingModelReady = prefs[Keys.ONBOARDING_MODEL_READY] ?: false,
       themeMode = ThemeMode.fromStorageKey(prefs[Keys.THEME_MODE]),
       readerFontSizeSp = prefs[Keys.READER_FONT_SIZE_SP] ?: 16,
       readerFontFamily = ReaderFontFamily.fromStorageKey(prefs[Keys.READER_FONT_FAMILY]),
@@ -108,6 +110,7 @@ class SettingsRepository @Inject constructor(
         wifiOnlyDownloads = prefs[Keys.WIFI_ONLY_DOWNLOADS] ?: true,
         batterySaverEnabled = prefs[Keys.BATTERY_SAVER_ENABLED] ?: false,
         onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+        onboardingModelReady = prefs[Keys.ONBOARDING_MODEL_READY] ?: false,
         themeMode = ThemeMode.fromStorageKey(prefs[Keys.THEME_MODE]),
         readerFontSizeSp = prefs[Keys.READER_FONT_SIZE_SP] ?: 16,
         readerFontFamily = ReaderFontFamily.fromStorageKey(prefs[Keys.READER_FONT_FAMILY]),
@@ -135,6 +138,7 @@ class SettingsRepository @Inject constructor(
       prefs[Keys.WIFI_ONLY_DOWNLOADS] = updated.wifiOnlyDownloads
       prefs[Keys.BATTERY_SAVER_ENABLED] = updated.batterySaverEnabled
       prefs[Keys.ONBOARDING_COMPLETED] = updated.onboardingCompleted
+      prefs[Keys.ONBOARDING_MODEL_READY] = updated.onboardingModelReady
       prefs[Keys.THEME_MODE] = updated.themeMode.name
       prefs[Keys.READER_FONT_SIZE_SP] = updated.readerFontSizeSp
       prefs[Keys.READER_FONT_FAMILY] = updated.readerFontFamily.name

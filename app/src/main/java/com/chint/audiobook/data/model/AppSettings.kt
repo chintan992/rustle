@@ -65,6 +65,7 @@ data class AppSettings(
   val wifiOnlyDownloads: Boolean = true,
   val batterySaverEnabled: Boolean = false,
   val onboardingCompleted: Boolean = false,
+  val onboardingModelReady: Boolean = false,
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
   // UI Round 4 (R5): reader display preferences. Defaults mirror the previous
   // hardcoded look (16sp sans / bodyLarge 1.5-ish leading via NORMAL) so old

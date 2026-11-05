@@ -36,6 +36,13 @@ data class PackIntegrity(
   val hashMismatches: List<String>
 )
 
+sealed interface EngineInitializationState {
+  data object Idle : EngineInitializationState
+  data object Initializing : EngineInitializationState
+  data object Ready : EngineInitializationState
+  data class Failed(val message: String) : EngineInitializationState
+}
+
 @HiltViewModel
 class ModelViewModel @Inject constructor(
   @ApplicationContext private val context: Context,
@@ -65,6 +72,11 @@ class ModelViewModel @Inject constructor(
   val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
 
   val packIntegrity: StateFlow<PackIntegrity> = _packIntegrity.asStateFlow()
+
+  private val _engineInitializationState =
+    MutableStateFlow<EngineInitializationState>(EngineInitializationState.Idle)
+  val engineInitializationState: StateFlow<EngineInitializationState> =
+    _engineInitializationState.asStateFlow()
 
   private val _kokoroDownloadState = MutableStateFlow<DownloadState>(
     if (kokoroModelManager.isModelReady()) DownloadState.Verified else DownloadState.Idle
@@ -195,6 +207,36 @@ class ModelViewModel @Inject constructor(
       }
     }
   }
+
+  fun initializeEngineForOnboarding() {
+    if (_engineInitializationState.value == EngineInitializationState.Initializing ||
+      _engineInitializationState.value == EngineInitializationState.Ready
+    ) return
+
+    _engineInitializationState.value = EngineInitializationState.Initializing
+    viewModelScope.launch(Dispatchers.IO) {
+      try {
+        val (missing, mismatches) = modelManager.verifyChecksums()
+        if (missing.isNotEmpty() || mismatches.isNotEmpty()) {
+          throw IllegalStateException(
+            "The voice pack is incomplete or failed integrity verification. Download it again."
+          )
+        }
+        engineManager.coldReload(modelManager.getModelDir())
+        _engineInitializationState.value = EngineInitializationState.Ready
+      } catch (cancelled: CancellationException) {
+        _engineInitializationState.value = EngineInitializationState.Idle
+        throw cancelled
+      } catch (error: Exception) {
+        _engineInitializationState.value = EngineInitializationState.Failed(
+          error.message ?: "Could not initialize the speech engine"
+        )
+      }
+    }
+  }
+
+  suspend fun generatePreviewAudio(text: String, voice: String): ByteArray =
+    engineManager.generateAudioWav(text, voice, modelManager.getModelDir())
 
   fun clearModelData() {
     if (downloadBusy()) return

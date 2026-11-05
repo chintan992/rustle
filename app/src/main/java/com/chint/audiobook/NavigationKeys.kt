@@ -44,3 +44,12 @@ data object SettingsKey : AppNavKey
 @Serializable
 @SerialName("licenses")
 data object LicensesKey : AppNavKey
+
+internal fun onboardingStartRoute(
+  onboardingCompleted: Boolean,
+  onboardingModelReady: Boolean
+): AppNavKey = when {
+  onboardingCompleted -> LibraryKey
+  onboardingModelReady -> VoiceSetupKey
+  else -> ModelManagerKey
+}

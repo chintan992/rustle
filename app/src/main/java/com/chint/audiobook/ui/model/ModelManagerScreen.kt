@@ -60,7 +60,10 @@ fun ModelManagerScreen(
   onRunBenchmarkClick: () -> Unit,
   onDebugCorruptFinalPackFile: () -> Unit,
   onDebugCorruptStagedPackFile: () -> Unit,
-  onBackClick: () -> Unit
+  onBackClick: () -> Unit,
+  isOnboarding: Boolean = false,
+  engineInitializationState: EngineInitializationState = EngineInitializationState.Idle,
+  onInitializeEngineClick: () -> Unit = {}
 ) {
   var showClearConfirmation by remember { mutableStateOf(false) }
   var showKokoroClearConfirmation by remember { mutableStateOf(false) }
@@ -86,7 +89,18 @@ fun ModelManagerScreen(
         )
       }
       Spacer(modifier = Modifier.width(8.dp))
-      Text("Model Manager", style = MaterialTheme.typography.headlineSmall)
+      Text(
+        if (isOnboarding) "Set up speech" else "Model Manager",
+        style = MaterialTheme.typography.headlineSmall
+      )
+    }
+    if (isOnboarding) {
+      Spacer(modifier = Modifier.height(6.dp))
+      Text(
+        "Step 2 of 3 - Download the voice pack to prepare Rustle's speech engine.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
     }
     Spacer(modifier = Modifier.height(16.dp))
     Text(
@@ -151,7 +165,7 @@ fun ModelManagerScreen(
               )
               Spacer(modifier = Modifier.width(4.dp))
               Text(
-                "sha256 verified — the pack is safe to use",
+                "sha256 verified - the pack is safe to use",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -181,6 +195,28 @@ fun ModelManagerScreen(
             "Missing: ${integrity.missingFiles}",
             color = MaterialTheme.colorScheme.error
           )
+        }
+      }
+    }
+
+    if (isOnboarding) {
+      Spacer(modifier = Modifier.height(12.dp))
+      when (val state = engineInitializationState) {
+        EngineInitializationState.Idle -> Unit
+        EngineInitializationState.Initializing -> {
+          Text("Initializing the speech engine...", style = MaterialTheme.typography.bodyMedium)
+          Spacer(modifier = Modifier.height(8.dp))
+          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        EngineInitializationState.Ready -> {
+          Text("Speech engine ready. Opening voice selection...")
+        }
+        is EngineInitializationState.Failed -> {
+          Text(state.message, color = MaterialTheme.colorScheme.error)
+          Spacer(modifier = Modifier.height(8.dp))
+          Button(onClick = onInitializeEngineClick) {
+            Text("Retry engine setup")
+          }
         }
       }
     }

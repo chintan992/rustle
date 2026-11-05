@@ -69,12 +69,14 @@ voice pack; narration itself runs locally.
 ## Getting started
 
 1. Install Rustle from [GitHub Releases](https://github.com/chintan992/rustle/releases/latest).
-2. On first launch, complete voice setup and download a model pack. Connect to
-   Wi-Fi if you want to avoid using mobile data; the model files are large.
-3. Import an EPUB, TXT, or Markdown file, or share supported content to Rustle.
-4. Open the book, choose a voice and playback settings, and press Play.
-5. Once the voice pack is installed, you can listen without an internet
-   connection.
+2. On first launch, choose whether to allow Rustle announcement notifications
+   (Android 13+). On older Android versions, announcements start enabled and
+   can be disabled in Rustle Settings.
+3. Download the Supertonic voice pack (about 138 MB). Connect to Wi-Fi if you
+   want to avoid using mobile data.
+4. Select your default narrator, then import an EPUB, TXT, or Markdown file.
+5. Open the book, choose playback settings, and press Play. Narration works
+   offline after the voice pack is installed.
 
 Rustle requires Android 7.0 (API 24) or later. APKs are provided for
 `arm64-v8a` (most modern Android devices), `armeabi-v7a` (32-bit ARM),

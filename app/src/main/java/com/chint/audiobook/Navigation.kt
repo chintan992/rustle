@@ -25,10 +25,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -88,6 +85,8 @@ fun MainNavigation() {
   // upstream has not emitted yet), which painted a one-frame onboarding flash
   // over the library on cold starts before the real value arrived.
   val appSettings = loadedSettings!!
+  val modelPackIntegrity by modelViewModel.packIntegrity.collectAsState()
+  val engineInitializationState by modelViewModel.engineInitializationState.collectAsState()
   val books by libraryViewModel.books.collectAsState()
   val playbackState by libraryViewModel.playbackState.collectAsState()
   // UI Round 4 (R6): per-book position sidecars drive the Continue card + rows.
@@ -106,7 +105,10 @@ fun MainNavigation() {
   // A1: active book for the persistent listening bar (collected at nav scope).
   val miniPlayerBook by readerViewModel.activeBook.collectAsState()
 
-  val initialKey = if (!appSettings.onboardingCompleted) VoiceSetupKey else LibraryKey
+  val initialKey = onboardingStartRoute(
+    appSettings.onboardingCompleted,
+    appSettings.onboardingModelReady
+  )
   val navigationState = rememberNavigationState(initialKey)
   val navigator = remember(navigationState) { Navigator(navigationState) }
 
@@ -121,9 +123,6 @@ fun MainNavigation() {
   }
 
   val localContext = androidx.compose.ui.platform.LocalContext.current
-  var announcementPermissionDialogVisible by rememberSaveable {
-    mutableStateOf(false)
-  }
 
   fun subscribeToAnnouncements() {
     AnnouncementNotifications.subscribe().addOnCompleteListener { result ->
@@ -158,71 +157,20 @@ fun MainNavigation() {
     }
   }
 
-  fun requestAnnouncementPermission() {
-    settingsViewModel.updateSettings {
-      it.copy(announcementPermissionPrompted = true)
-    }
-    if (
-      Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-      ContextCompat.checkSelfPermission(
-        localContext,
-        Manifest.permission.POST_NOTIFICATIONS
-      ) != PackageManager.PERMISSION_GRANTED
-    ) {
-      announcementPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-    } else {
-      subscribeToAnnouncements()
-    }
-  }
-
-  LaunchedEffect(
-    appSettings.onboardingCompleted,
-    appSettings.announcementPermissionPrompted
-  ) {
-    if (appSettings.onboardingCompleted && !appSettings.announcementPermissionPrompted) {
-      announcementPermissionDialogVisible = true
-    }
-  }
-
-  if (announcementPermissionDialogVisible) {
-    AlertDialog(
-      onDismissRequest = {
-        announcementPermissionDialogVisible = false
-        settingsViewModel.updateSettings {
-          it.copy(
-            announcementNotificationsEnabled = false,
-            announcementPermissionPrompted = true
-          )
-        }
-      },
-      title = { Text(stringResource(R.string.announcement_permission_title)) },
-      text = { Text(stringResource(R.string.announcement_permission_message)) },
-      confirmButton = {
-        TextButton(
-          onClick = {
-            announcementPermissionDialogVisible = false
-            requestAnnouncementPermission()
-          }
-        ) {
-          Text(stringResource(R.string.announcement_permission_enable))
-        }
-      },
-      dismissButton = {
-        TextButton(
-          onClick = {
-            announcementPermissionDialogVisible = false
-            settingsViewModel.updateSettings {
-              it.copy(
-                announcementNotificationsEnabled = false,
-                announcementPermissionPrompted = true
-              )
-            }
-          }
-        ) {
-          Text(stringResource(R.string.announcement_permission_not_now))
-        }
+  LaunchedEffect(Unit) {
+    if (!appSettings.onboardingCompleted && !appSettings.announcementPermissionPrompted) {
+      if (
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(
+          localContext,
+          Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
+      ) {
+        announcementPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+      } else {
+        subscribeToAnnouncements()
       }
-    )
+    }
   }
 
   val lifecycleOwner = LocalLifecycleOwner.current
@@ -238,12 +186,42 @@ fun MainNavigation() {
   val batteryGuidanceVisible = !powerManager.isIgnoringBatteryOptimizations(localContext.packageName) &&
     !appSettings.batteryGuidanceDismissed
 
-  LaunchedEffect(appSettings.onboardingCompleted) {
+  LaunchedEffect(appSettings.onboardingCompleted, appSettings.onboardingModelReady) {
     if (appSettings.onboardingCompleted) {
       updateViewModel.checkForUpdate()
+    } else {
+      val onboardingRoute = onboardingStartRoute(
+        onboardingCompleted = false,
+        onboardingModelReady = appSettings.onboardingModelReady
+      )
+      if (navigationState.currentRoute != onboardingRoute) {
+        navigator.replaceRoot(onboardingRoute)
+      }
     }
-    if (!appSettings.onboardingCompleted && navigationState.currentRoute != VoiceSetupKey) {
-      navigator.navigate(VoiceSetupKey)
+  }
+
+  LaunchedEffect(
+    navigationState.currentRoute,
+    appSettings.onboardingCompleted,
+    appSettings.onboardingModelReady,
+    modelPackIntegrity.packReady,
+    modelPackIntegrity.hashMismatches,
+    engineInitializationState
+  ) {
+    if (
+      !appSettings.onboardingCompleted &&
+      !appSettings.onboardingModelReady &&
+      navigationState.currentRoute == ModelManagerKey &&
+      modelPackIntegrity.packReady &&
+      modelPackIntegrity.hashMismatches.isEmpty()
+    ) {
+      when (engineInitializationState) {
+        com.chint.audiobook.ui.model.EngineInitializationState.Idle ->
+          modelViewModel.initializeEngineForOnboarding()
+        com.chint.audiobook.ui.model.EngineInitializationState.Ready ->
+          settingsViewModel.updateSettings { it.copy(onboardingModelReady = true) }
+        else -> Unit
+      }
     }
   }
 
@@ -305,6 +283,15 @@ fun MainNavigation() {
       entry<VoiceSetupKey> {
         VoiceSetupScreen(
           engine = appSettings.ttsEngine,
+          isOnboarding = !appSettings.onboardingCompleted,
+          onPreviewVoice = if (
+            !appSettings.onboardingCompleted &&
+            appSettings.ttsEngine == TtsEngine.SUPERTONIC
+          ) {
+            { text, voice -> modelViewModel.generatePreviewAudio(text, voice) }
+          } else {
+            null
+          },
           onComplete = { voice, highlight ->
             settingsViewModel.updateSettings {
               it.copy(
@@ -584,7 +571,6 @@ fun MainNavigation() {
         val downloadState by modelViewModel.downloadState.collectAsState()
         val kokoroDownloadState by modelViewModel.kokoroDownloadState.collectAsState()
         val benchmarkResult by modelViewModel.benchmarkResult.collectAsState()
-        val packIntegrity by modelViewModel.packIntegrity.collectAsState()
         val kokoroPackIntegrity by modelViewModel.kokoroPackIntegrity.collectAsState()
         val rtfStats by modelViewModel.rtfStats.collectAsState()
         val debugNote by modelViewModel.debugNote.collectAsState()
@@ -598,7 +584,7 @@ fun MainNavigation() {
         ModelManagerScreen(
           downloadState = downloadState,
           benchmarkResult = benchmarkResult,
-          packIntegrity = packIntegrity,
+          packIntegrity = modelPackIntegrity,
           kokoroDownloadState = kokoroDownloadState,
           kokoroPackIntegrity = kokoroPackIntegrity,
           rtfStats = rtfStats,
@@ -611,7 +597,10 @@ fun MainNavigation() {
           onRunBenchmarkClick = { modelViewModel.runBenchmark() },
           onDebugCorruptFinalPackFile = { modelViewModel.debugCorruptFinalPackFileAndRecover() },
           onDebugCorruptStagedPackFile = { modelViewModel.debugCorruptStagedPackFileTwiceAndExhaust() },
-          onBackClick = { navigator.goBack() }
+          onBackClick = { navigator.goBack() },
+          isOnboarding = !appSettings.onboardingCompleted && !appSettings.onboardingModelReady,
+          engineInitializationState = engineInitializationState,
+          onInitializeEngineClick = { modelViewModel.initializeEngineForOnboarding() }
         )
       }
 
