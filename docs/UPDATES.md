@@ -69,10 +69,22 @@ all referenced APKs to the same GitHub Release.
 
 ## Play Store distribution
 
-When Play Store distribution is introduced, route Play-installed builds to
-the Play Store update flow rather than downloading a GitHub APK. A build
-installed from GitHub can only be updated in place by a Play build if the
-signing certificates are compatible; otherwise users must remain on the
-GitHub channel or follow a separately designed migration path. Check Google
-Play's installer/signing policies before enabling GitHub APK installation in a
-Play-distributed variant.
+Build the Play upload artifact as an Android App Bundle (AAB):
+
+```powershell
+.\gradlew.bat :app:bundleRelease
+```
+
+The bundle is written to
+`app/build/outputs/bundle/release/app-release.aab`. Verify that it is signed
+with the intended upload key before submitting it in Play Console. Keep the
+upload key consistent; Play App Signing manages the distribution signing key.
+Use Play's internal or closed testing track before production rollout.
+
+The GitHub updater and Play Store are separate distribution channels. Route
+Play-installed builds to the Play Store update flow rather than downloading a
+GitHub APK. A build installed from GitHub can only be updated in place by a
+Play build if the signing certificates are compatible; otherwise users must
+remain on the GitHub channel or follow a separately designed migration path.
+Check Google Play's installer/signing policies before enabling GitHub APK
+installation in a Play-distributed variant.

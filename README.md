@@ -135,8 +135,28 @@ Books, extracted text, generated audio, and playback progress are stored in
 app-private storage. Book content is not uploaded. An internet connection is
 used to download model packs and check for app updates. Rustle also uses
 Firebase Analytics and Crashlytics for app interaction analytics and crash
-diagnostics. See the in-app **Licenses & AI Disclosure** screen for the
-disclosures and details about data use.
+diagnostics. Announcement notifications use Firebase Cloud Messaging (FCM);
+new installs are prompted after voice setup to enable them.
+See the in-app **Licenses & AI Disclosure** screen for the disclosures and
+details about data use.
+
+### Sending announcements
+
+The Android client subscribes opted-in devices to the FCM topic
+`general-announcements`. Announcements can be sent from Firebase Console or a
+trusted server using the Firebase Admin SDK. Never place service-account
+credentials or FCM server credentials in the Android app. Local builds also need a valid
+`google-services.json` for the Firebase project associated with the app's
+`dev.chintan992.rustle` application ID; the committed placeholder is not a
+live FCM configuration.
+
+Users can enable or disable announcements from **Settings**. Android 13 and
+later also requires the system notification permission, which users can decline;
+the rest of Rustle remains available. FCM auto-initialization is off until the
+user enables announcements; opting out unsubscribes the device and disables it
+again. Notifications received while Rustle is open are displayed by the app;
+background notification messages are handled by Firebase. Tapping an
+announcement opens Rustle.
 
 ## Licensing
 

@@ -94,5 +94,7 @@ data class AppSettings(
   val prepareWifiOnly: Boolean = true,
   val prepareOnlyWhileCharging: Boolean = true,
   // Track 3: skip quiet pauses in narration automatically
-  val skipSilence: Boolean = false
+  val skipSilence: Boolean = false,
+  val announcementNotificationsEnabled: Boolean = true,
+  val announcementPermissionPrompted: Boolean = false
 )

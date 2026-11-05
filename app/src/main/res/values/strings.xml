@@ -60,6 +60,17 @@
     <string name="settings_highlight_desc">Tint the sentence currently being read</string>
     <string name="settings_wifi_only_title">Wi-Fi Only Downloads</string>
     <string name="settings_wifi_only_desc">Fetch the model pack over Wi-Fi only</string>
+    <string name="settings_announcements_title">Announcements</string>
+    <string name="settings_announcements_desc">Receive occasional Rustle news and updates</string>
+    <string name="settings_announcements_permission_denied">Notification permission was not granted. Allow notifications in Android settings to receive announcements.</string>
+    <string name="settings_announcements_subscription_failed">Could not update announcement preferences. Check your connection and try again.</string>
+    <string name="announcement_permission_title">Stay up to date with Rustle</string>
+    <string name="announcement_permission_message">Enable notifications to receive occasional Rustle news and updates. You can change this anytime in Settings.</string>
+    <string name="announcement_permission_enable">Enable notifications</string>
+    <string name="announcement_permission_not_now">Not now</string>
+    <string name="announcement_notification_channel_id">general_announcements</string>
+    <string name="announcement_notification_channel_name">Announcements</string>
+    <string name="announcement_notification_channel_description">Occasional Rustle news and updates</string>
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_theme_desc">Theme used across the app</string>
     <string name="settings_reader_text">Reader Text</string>

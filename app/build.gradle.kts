@@ -24,6 +24,9 @@ val releaseKeystoreFile: File? = releaseKeystoreProperties.getProperty("storeFil
   val f = File(raw)
   if (f.isAbsolute) f else rootDir.resolve(raw)
 }
+val buildingAppBundle = gradle.startParameter.taskNames.any { taskName ->
+  taskName.substringAfterLast(':').startsWith("bundle", ignoreCase = true)
+}
 
 android {
     namespace = "com.chint.audiobook"
@@ -36,8 +39,8 @@ android {
         applicationId = "dev.chintan992.rustle"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
     }
 
@@ -67,7 +70,9 @@ android {
     }
     splits {
       abi {
-        isEnable = true
+        // AABs create per-device ABI splits through Play. APK release tasks
+        // retain explicit ABI variants for the GitHub updater.
+        isEnable = !buildingAppBundle
         reset()
         include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         isUniversalApk = false
@@ -180,5 +185,6 @@ dependencies {
   implementation(platform(libs.firebase.bom))
   implementation(libs.firebase.analytics)
   implementation(libs.firebase.crashlytics)
+  implementation(libs.firebase.messaging)
   implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 }

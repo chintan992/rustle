@@ -3,6 +3,7 @@ package com.chint.audiobook
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
@@ -45,6 +46,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.chint.audiobook.data.model.TtsEngine
 import com.chint.audiobook.engine.TtsEngineSelection
+import com.chint.audiobook.notifications.AnnouncementNotifications
 import com.chint.audiobook.ui.import.ImportScreen
 import com.chint.audiobook.ui.import.ImportViewModel
 import com.chint.audiobook.ui.library.BookProgress
@@ -118,11 +120,111 @@ fun MainNavigation() {
     }
   }
 
-  // UI round: notification permission is requested at the moment onboarding
-  // ENDS - a user-driven, contextual ask (Android's own best practice), not a
-  // launch-blocking system dialog. Fires once per process via a saveable flag;
-  // only on Android 13+ and only if not already granted.
   val localContext = androidx.compose.ui.platform.LocalContext.current
+  var announcementPermissionDialogVisible by rememberSaveable {
+    mutableStateOf(false)
+  }
+
+  fun subscribeToAnnouncements() {
+    AnnouncementNotifications.subscribe().addOnCompleteListener { result ->
+      settingsViewModel.updateSettings {
+        it.copy(
+          announcementNotificationsEnabled = result.isSuccessful,
+          announcementPermissionPrompted = true
+        )
+      }
+      if (!result.isSuccessful) {
+        Toast.makeText(
+          localContext,
+          R.string.settings_announcements_subscription_failed,
+          Toast.LENGTH_LONG
+        ).show()
+      }
+    }
+  }
+
+  val announcementPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { granted ->
+    if (granted) {
+      subscribeToAnnouncements()
+    } else {
+      settingsViewModel.updateSettings {
+        it.copy(
+          announcementNotificationsEnabled = false,
+          announcementPermissionPrompted = true
+        )
+      }
+    }
+  }
+
+  fun requestAnnouncementPermission() {
+    settingsViewModel.updateSettings {
+      it.copy(announcementPermissionPrompted = true)
+    }
+    if (
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      ContextCompat.checkSelfPermission(
+        localContext,
+        Manifest.permission.POST_NOTIFICATIONS
+      ) != PackageManager.PERMISSION_GRANTED
+    ) {
+      announcementPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    } else {
+      subscribeToAnnouncements()
+    }
+  }
+
+  LaunchedEffect(
+    appSettings.onboardingCompleted,
+    appSettings.announcementPermissionPrompted
+  ) {
+    if (appSettings.onboardingCompleted && !appSettings.announcementPermissionPrompted) {
+      announcementPermissionDialogVisible = true
+    }
+  }
+
+  if (announcementPermissionDialogVisible) {
+    AlertDialog(
+      onDismissRequest = {
+        announcementPermissionDialogVisible = false
+        settingsViewModel.updateSettings {
+          it.copy(
+            announcementNotificationsEnabled = false,
+            announcementPermissionPrompted = true
+          )
+        }
+      },
+      title = { Text(stringResource(R.string.announcement_permission_title)) },
+      text = { Text(stringResource(R.string.announcement_permission_message)) },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            announcementPermissionDialogVisible = false
+            requestAnnouncementPermission()
+          }
+        ) {
+          Text(stringResource(R.string.announcement_permission_enable))
+        }
+      },
+      dismissButton = {
+        TextButton(
+          onClick = {
+            announcementPermissionDialogVisible = false
+            settingsViewModel.updateSettings {
+              it.copy(
+                announcementNotificationsEnabled = false,
+                announcementPermissionPrompted = true
+              )
+            }
+          }
+        ) {
+          Text(stringResource(R.string.announcement_permission_not_now))
+        }
+      }
+    )
+  }
+
   val lifecycleOwner = LocalLifecycleOwner.current
   DisposableEffect(lifecycleOwner, updateViewModel) {
     val observer = LifecycleEventObserver { _, event ->
@@ -135,27 +237,6 @@ fun MainNavigation() {
   val powerManager = localContext.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
   val batteryGuidanceVisible = !powerManager.isIgnoringBatteryOptimizations(localContext.packageName) &&
     !appSettings.batteryGuidanceDismissed
-
-  var notificationPermissionRequested by rememberSaveable { mutableStateOf(false) }
-  val notificationPermissionLauncher = rememberLauncherForActivityResult(
-    ActivityResultContracts.RequestPermission()
-  ) { isGranted: Boolean ->
-    // Granted or denied - playback continues either way; media-session
-    // notifications are exempt from POST_NOTIFICATIONS gating.
-  }
-
-  fun maybeRequestNotificationPermission() {
-    if (notificationPermissionRequested) return
-    notificationPermissionRequested = true
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-      ContextCompat.checkSelfPermission(
-        localContext,
-        Manifest.permission.POST_NOTIFICATIONS
-      ) != PackageManager.PERMISSION_GRANTED
-    ) {
-      notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-    }
-  }
 
   LaunchedEffect(appSettings.onboardingCompleted) {
     if (appSettings.onboardingCompleted) {
@@ -234,12 +315,10 @@ fun MainNavigation() {
               )
             }
             navigator.finishOnboarding()
-            maybeRequestNotificationPermission()
           },
           onSkip = {
             settingsViewModel.updateSettings { it.copy(onboardingCompleted = true) }
             navigator.finishOnboarding()
-            maybeRequestNotificationPermission()
           }
         )
       }

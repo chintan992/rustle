@@ -56,6 +56,8 @@ class SettingsRepository @Inject constructor(
     val PREPARE_WIFI_ONLY = booleanPreferencesKey("prepare_wifi_only")
     val PREPARE_ONLY_CHARGING = booleanPreferencesKey("prepare_only_charging")
     val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
+    val ANNOUNCEMENT_NOTIFICATIONS_ENABLED = booleanPreferencesKey("announcement_notifications_enabled")
+    val ANNOUNCEMENT_PERMISSION_PROMPTED = booleanPreferencesKey("announcement_permission_prompted")
 
     // Playback state keys
     val BOOK_SLUG = stringPreferencesKey("last_book_slug")
@@ -88,7 +90,11 @@ class SettingsRepository @Inject constructor(
       prepareAheadChapters = prefs[Keys.PREPARE_AHEAD_CHAPTERS] ?: 1,
       prepareWifiOnly = prefs[Keys.PREPARE_WIFI_ONLY] ?: true,
       prepareOnlyWhileCharging = prefs[Keys.PREPARE_ONLY_CHARGING] ?: true,
-      skipSilence = prefs[Keys.SKIP_SILENCE] ?: false
+      skipSilence = prefs[Keys.SKIP_SILENCE] ?: false,
+      announcementNotificationsEnabled = prefs[Keys.ANNOUNCEMENT_NOTIFICATIONS_ENABLED]
+        ?: !(prefs[Keys.ONBOARDING_COMPLETED] ?: false),
+      announcementPermissionPrompted = prefs[Keys.ANNOUNCEMENT_PERMISSION_PROMPTED]
+        ?: (prefs[Keys.ONBOARDING_COMPLETED] ?: false)
     )
   }
 
@@ -115,7 +121,11 @@ class SettingsRepository @Inject constructor(
         prepareAheadChapters = prefs[Keys.PREPARE_AHEAD_CHAPTERS] ?: 1,
         prepareWifiOnly = prefs[Keys.PREPARE_WIFI_ONLY] ?: true,
         prepareOnlyWhileCharging = prefs[Keys.PREPARE_ONLY_CHARGING] ?: true,
-        skipSilence = prefs[Keys.SKIP_SILENCE] ?: false
+        skipSilence = prefs[Keys.SKIP_SILENCE] ?: false,
+        announcementNotificationsEnabled = prefs[Keys.ANNOUNCEMENT_NOTIFICATIONS_ENABLED]
+          ?: !(prefs[Keys.ONBOARDING_COMPLETED] ?: false),
+        announcementPermissionPrompted = prefs[Keys.ANNOUNCEMENT_PERMISSION_PROMPTED]
+          ?: (prefs[Keys.ONBOARDING_COMPLETED] ?: false)
       )
       val updated = transform(current)
       prefs[Keys.TTS_ENGINE] = updated.ttsEngine.name
@@ -143,6 +153,8 @@ class SettingsRepository @Inject constructor(
       prefs[Keys.PREPARE_WIFI_ONLY] = updated.prepareWifiOnly
       prefs[Keys.PREPARE_ONLY_CHARGING] = updated.prepareOnlyWhileCharging
       prefs[Keys.SKIP_SILENCE] = updated.skipSilence
+      prefs[Keys.ANNOUNCEMENT_NOTIFICATIONS_ENABLED] = updated.announcementNotificationsEnabled
+      prefs[Keys.ANNOUNCEMENT_PERMISSION_PROMPTED] = updated.announcementPermissionPrompted
     }
   }
 

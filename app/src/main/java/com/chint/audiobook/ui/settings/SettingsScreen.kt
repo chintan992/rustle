@@ -1,5 +1,10 @@
 package com.chint.audiobook.ui.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -46,6 +51,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -53,7 +59,9 @@ import com.chint.audiobook.R
 import com.chint.audiobook.data.model.AppSettings
 import com.chint.audiobook.data.model.ThemeMode
 import com.chint.audiobook.data.model.TtsEngine
+import com.chint.audiobook.notifications.AnnouncementNotifications
 import com.chint.audiobook.ui.reader.DisplaySheet
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -76,6 +84,57 @@ fun SettingsScreen(
     settings.kokoroDialogueVoice
   } else {
     settings.dialogueVoice
+  }
+  val context = LocalContext.current
+  var announcementError by remember { mutableStateOf<String?>(null) }
+  var announcementUpdateInProgress by remember { mutableStateOf(false) }
+
+  fun updateAnnouncementSubscription(enabled: Boolean) {
+    announcementError = null
+    announcementUpdateInProgress = true
+    if (!enabled) {
+      onUpdateSettings { it.copy(announcementNotificationsEnabled = false) }
+    }
+    val task = if (enabled) {
+      AnnouncementNotifications.subscribe()
+    } else {
+      AnnouncementNotifications.unsubscribe()
+    }
+    task.addOnCompleteListener { result ->
+      announcementUpdateInProgress = false
+      if (result.isSuccessful) {
+        onUpdateSettings { it.copy(announcementNotificationsEnabled = enabled) }
+      } else {
+        if (enabled) {
+          onUpdateSettings { it.copy(announcementNotificationsEnabled = false) }
+        }
+        announcementError = context.getString(R.string.settings_announcements_subscription_failed)
+      }
+    }
+  }
+
+  val announcementPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { granted ->
+    if (granted) {
+      updateAnnouncementSubscription(true)
+    } else {
+      announcementError = context.getString(R.string.settings_announcements_permission_denied)
+    }
+  }
+
+  fun requestAnnouncementOptIn() {
+    if (
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.POST_NOTIFICATIONS
+      ) != PackageManager.PERMISSION_GRANTED
+    ) {
+      announcementPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    } else {
+      updateAnnouncementSubscription(true)
+    }
   }
 
   Column(
@@ -103,6 +162,24 @@ fun SettingsScreen(
       Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
     }
     Spacer(modifier = Modifier.height(20.dp))
+
+    SectionCard {
+      SwitchSettingRow(
+        title = stringResource(R.string.settings_announcements_title),
+        supporting = stringResource(R.string.settings_announcements_desc),
+        checked = settings.announcementNotificationsEnabled,
+        enabled = !announcementUpdateInProgress,
+        onCheckedChange = { enabled ->
+          announcementError = null
+          if (enabled) requestAnnouncementOptIn() else updateAnnouncementSubscription(false)
+        }
+      )
+      announcementError?.let { error ->
+        Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+      }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
 
     SectionCard {
       Text("Speech engine", style = MaterialTheme.typography.titleMedium)
@@ -604,12 +681,14 @@ private fun SwitchSettingRow(
   title: String,
   supporting: String? = null,
   checked: Boolean,
+  enabled: Boolean = true,
   onCheckedChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier
 ) {
   SettingRow(title = title, supporting = supporting) {
     Switch(
       checked = checked,
+      enabled = enabled,
       onCheckedChange = onCheckedChange,
       modifier = modifier
     )
